@@ -2,8 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
@@ -13,6 +17,7 @@ import (
 type ProxyConfig struct {
 	ListenAddr    string
 	Upstream      string
+	DOHUpstream   bool
 	FilterAll     bool
 	FilterDomains []string
 }
@@ -26,29 +31,90 @@ func matchDomain(domains []string, name string) bool {
 	return false
 }
 
+func dohRequestProxy(w dns.ResponseWriter, r *dns.Msg, upstream string) {
+
+	c := &http.Client{}
+
+	pack, err := r.Pack()
+	if err != nil {
+		dnsError(w, r, dns.RcodeServerFailure, err)
+		return
+	}
+
+	request, err := http.NewRequest("POST", upstream, bytes.NewReader(pack))
+	if err != nil {
+		dnsError(w, r, dns.RcodeServerFailure, err)
+		return
+	}
+
+	request.Header.Set("Accept", "application/dns-message")
+	request.Header.Set("content-type", "application/dns-message")
+
+	resp, err := c.Do(request)
+	if err != nil {
+		dnsError(w, r, dns.RcodeServerFailure, err)
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		dnsError(w, r, dns.RcodeServerFailure, errors.New(resp.Status))
+		return
+	}
+
+	buffer := bytes.Buffer{}
+	_, err = buffer.ReadFrom(resp.Body)
+	if err != nil {
+		dnsError(w, r, dns.RcodeServerFailure, err)
+		return
+	}
+
+	log.Printf("Request: %s (DoH)", r.Question[0].Name)
+	// Directly write message (we dont need to decode locally)
+	w.Write(buffer.Bytes())
+}
+
+func dnsRequestProxy(w dns.ResponseWriter, r *dns.Msg, upstream string) {
+	c := new(dns.Client)
+	out, rtt, err := c.Exchange(r, upstream)
+	if err != nil {
+		dnsError(w, r, dns.RcodeServerFailure, err)
+		return
+	}
+	log.Printf("Request: %s (%s)", r.Question[0].Name, rtt)
+	w.WriteMsg(out)
+}
+
+func dnsError(w dns.ResponseWriter, r *dns.Msg, rcode int, err error) {
+	log.Print(err)
+	m := new(dns.Msg)
+	m.SetRcode(r, rcode)
+	// Add the error as TXT record in AR section
+	txt, err := dns.NewRR(fmt.Sprintf(". 0 IN TXT \"%s\"", err.Error()))
+	if err == nil {
+		m.Extra = append(m.Extra, txt)
+	}
+	w.WriteMsg(m)
+}
+
 func makeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 	return func(w dns.ResponseWriter, r *dns.Msg) {
-		m := new(dns.Msg)
+
 		if len(r.Question) != 1 {
-			m.SetRcode(r, dns.RcodeFormatError)
-		} else {
-			name := r.Question[0].Name
-			if (r.Question[0].Qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
-				log.Printf("Request: %s (blocked)", name)
-				m.SetRcode(r, dns.RcodeNameError)
-			} else {
-				c := new(dns.Client)
-				in, rtt, err := c.Exchange(r, config.Upstream)
-				if err != nil {
-					log.Print("ERROR :: ", err)
-					m.SetRcode(r, dns.RcodeServerFailure)
-				} else {
-					log.Printf("Request: %s (%s)", name, rtt)
-					m = in
-				}
-			}
+			dnsError(w, r, dns.RcodeFormatError, errors.New("Invalid question"))
+			return
 		}
-		w.WriteMsg(m)
+
+		name := r.Question[0].Name
+		if (r.Question[0].Qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
+			dnsError(w, r, dns.RcodeNameError, fmt.Errorf("Request: %s (aaaa blocked)", name))
+			return
+		}
+
+		if config.DOHUpstream {
+			dohRequestProxy(w, r, config.Upstream)
+		} else {
+			dnsRequestProxy(w, r, config.Upstream)
+		}
 	}
 }
 
@@ -75,6 +141,7 @@ func main() {
 	config := ProxyConfig{
 		ListenAddr:    *listenFlag,
 		Upstream:      *upstreamFlag,
+		DOHUpstream:   strings.HasPrefix(*upstreamFlag, "https://"),
 		FilterAll:     *filterAllFlag,
 		FilterDomains: make([]string, 0),
 	}
@@ -82,10 +149,7 @@ func main() {
 	// Get filter domains from command line (comma separated)
 	if len(*filterDomainFlag) > 0 {
 		for _, v := range strings.Split(*filterDomainFlag, ",") {
-			if !strings.HasSuffix(v, ".") {
-				v += "."
-			}
-			config.FilterDomains = append(config.FilterDomains, v)
+			config.FilterDomains = append(config.FilterDomains, dns.CanonicalName(v))
 		}
 	}
 
@@ -99,11 +163,7 @@ func main() {
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasSuffix(line, ".") {
-				line += "."
-			}
-			config.FilterDomains = append(config.FilterDomains, line)
+			config.FilterDomains = append(config.FilterDomains, dns.CanonicalName(scanner.Text()))
 		}
 
 		if err := scanner.Err(); err != nil {
@@ -139,6 +199,7 @@ func main() {
 	dns.HandleFunc(".", makeHandler(config))
 
 	log.Printf("Started server: %s", config.ListenAddr)
+	log.Printf("Upstream: %s (DOH=%t)", config.Upstream, config.DOHUpstream)
 	log.Printf("Filter All: %t", config.FilterAll)
 	log.Printf("Filter Domains: %s", strings.Join(config.FilterDomains, " "))
 
