@@ -102,7 +102,9 @@ func makeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 		name := r.Question[0].Name
 		if (r.Question[0].Qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
-			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, fmt.Errorf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String())))
+			msg := fmt.Sprintf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String())
+			log.Print(msg)
+			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New(msg)))
 			return
 		}
 
