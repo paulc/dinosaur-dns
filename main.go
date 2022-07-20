@@ -16,8 +16,7 @@ import (
 
 type ProxyConfig struct {
 	ListenAddr    []string
-	Upstream      string
-	DOHUpstream   bool
+	Upstream      []string
 	FilterAll     bool
 	FilterDomains []string
 }
@@ -31,20 +30,27 @@ func matchDomain(domains []string, name string) bool {
 	return false
 }
 
-func dohRequestProxy(w dns.ResponseWriter, r *dns.Msg, upstream string) {
+func dnsRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
+	c := new(dns.Client)
+	out, _, err := c.Exchange(r, resolver)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
 
 	c := &http.Client{}
 
 	pack, err := r.Pack()
 	if err != nil {
-		dnsError(w, r, dns.RcodeServerFailure, err)
-		return
+		return nil, err
 	}
 
-	request, err := http.NewRequest("POST", upstream, bytes.NewReader(pack))
+	request, err := http.NewRequest("POST", resolver, bytes.NewReader(pack))
 	if err != nil {
-		dnsError(w, r, dns.RcodeServerFailure, err)
-		return
+		return nil, err
 	}
 
 	request.Header.Set("Accept", "application/dns-message")
@@ -52,38 +58,29 @@ func dohRequestProxy(w dns.ResponseWriter, r *dns.Msg, upstream string) {
 
 	resp, err := c.Do(request)
 	if err != nil {
-		dnsError(w, r, dns.RcodeServerFailure, err)
-		return
+		return nil, err
 	}
 
 	if resp.StatusCode != 200 {
-		dnsError(w, r, dns.RcodeServerFailure, errors.New(resp.Status))
-		return
+		return nil, errors.New(resp.Status)
 	}
 
 	buffer := bytes.Buffer{}
 	_, err = buffer.ReadFrom(resp.Body)
 	if err != nil {
-		dnsError(w, r, dns.RcodeServerFailure, err)
-		return
+		return nil, err
 	}
 
-	// Directly write message (we dont need to decode locally)
-	w.Write(buffer.Bytes())
-}
-
-func dnsRequestProxy(w dns.ResponseWriter, r *dns.Msg, upstream string) {
-	c := new(dns.Client)
-	out, _, err := c.Exchange(r, upstream)
-	if err != nil {
-		dnsError(w, r, dns.RcodeServerFailure, err)
-		return
+	out := new(dns.Msg)
+	if out.Unpack(buffer.Bytes()) != nil {
+		return nil, err
 	}
-	w.WriteMsg(out)
+
+	return out, nil
+
 }
 
-func dnsError(w dns.ResponseWriter, r *dns.Msg, rcode int, err error) {
-	log.Print(err)
+func dnsErrorResponse(r *dns.Msg, rcode int, err error) *dns.Msg {
 	m := new(dns.Msg)
 	m.SetRcode(r, rcode)
 	// Add the error as TXT record in AR section
@@ -91,30 +88,46 @@ func dnsError(w dns.ResponseWriter, r *dns.Msg, rcode int, err error) {
 	if err == nil {
 		m.Extra = append(m.Extra, txt)
 	}
-	w.WriteMsg(m)
+	return m
 }
 
 func makeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
+
 	return func(w dns.ResponseWriter, r *dns.Msg) {
 
 		if len(r.Question) != 1 {
-			dnsError(w, r, dns.RcodeFormatError, errors.New("Invalid question"))
+			w.WriteMsg(dnsErrorResponse(r, dns.RcodeFormatError, errors.New("Invalid question")))
 			return
 		}
 
 		name := r.Question[0].Name
 		if (r.Question[0].Qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
-			dnsError(w, r, dns.RcodeNameError, fmt.Errorf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String()))
+			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, fmt.Errorf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String())))
 			return
 		}
 
 		log.Printf("%s %s", name, dns.Type(r.Question[0].Qtype).String())
 
-		if config.DOHUpstream {
-			dohRequestProxy(w, r, config.Upstream)
-		} else {
-			dnsRequestProxy(w, r, config.Upstream)
+		for _, resolver := range config.Upstream {
+
+			var out *dns.Msg
+			var err error
+
+			if strings.HasPrefix(resolver, "https://") {
+				out, err = dohRequest(r, resolver)
+			} else {
+				out, err = dnsRequest(r, resolver)
+			}
+
+			if err == nil {
+				w.WriteMsg(out)
+				return
+			}
+
+			log.Print(err)
+
 		}
+		w.WriteMsg(dnsErrorResponse(r, dns.RcodeServerFailure, errors.New("Upstream error")))
 	}
 }
 
@@ -123,10 +136,10 @@ func main() {
 	// Command line flags
 
 	var listenFlag = flag.String("listen", "127.0.0.1:8053", "Listen address (comma separated) (default: 127.0.0.1:8053)")
-	var upstreamFlag = flag.String("upstream", "1.1.1.1:53", "Upstream resolver (default: 1.1.1.1:53)")
+	var upstreamFlag = flag.String("upstream", "1.1.1.1:53", "Upstream resolver [host:port or https://...] (comma separated) (default: 1.1.1.1:53)")
 	var filterAllFlag = flag.Bool("filter-all", false, "Filter all AAAA requests (default: false)")
 	var filterDomainFlag = flag.String("filter-domains", "", "Filter AAAA requests for matching domains (comma-separated) (default: \"\")")
-	var filterFileFlag = flag.String("filter-file", "", "Filter AAAA requests for matching file from file (default: \"\")")
+	var filterFileFlag = flag.String("filter-file", "", "Filter AAAA requests from file (default: \"\")")
 	var helpFlag = flag.Bool("help", false, "Show usage")
 
 	flag.Parse()
@@ -137,11 +150,9 @@ func main() {
 	}
 
 	// Initialise config
-
 	config := ProxyConfig{
 		ListenAddr:    make([]string, 0),
-		Upstream:      *upstreamFlag,
-		DOHUpstream:   strings.HasPrefix(*upstreamFlag, "https://"),
+		Upstream:      make([]string, 0),
 		FilterAll:     *filterAllFlag,
 		FilterDomains: make([]string, 0),
 	}
@@ -149,6 +160,11 @@ func main() {
 	// Get listen address
 	for _, v := range strings.Split(*listenFlag, ",") {
 		config.ListenAddr = append(config.ListenAddr, v)
+	}
+
+	// Get upstream resolvers
+	for _, v := range strings.Split(*upstreamFlag, ",") {
+		config.Upstream = append(config.Upstream, v)
 	}
 
 	// Get filter domains from command line (comma separated)
@@ -206,7 +222,7 @@ func main() {
 	dns.HandleFunc(".", makeHandler(config))
 
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
-	log.Printf("Upstream: %s (DOH=%t)", config.Upstream, config.DOHUpstream)
+	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
 	log.Printf("Filter All: %t", config.FilterAll)
 	log.Printf("Filter Domains: %s", strings.Join(config.FilterDomains, " "))
 
