@@ -14,6 +14,9 @@ import (
 	"github.com/miekg/dns"
 )
 
+var logDebug func(...any)
+var logDebugf func(string, ...any)
+
 type ProxyConfig struct {
 	ListenAddr    []string
 	Upstream      []string
@@ -143,12 +146,21 @@ func main() {
 	var filterDomainFlag = flag.String("filter-domains", "", "Filter AAAA requests for matching domains (comma-separated) (default: \"\")")
 	var filterFileFlag = flag.String("filter-file", "", "Filter AAAA requests from file (default: \"\")")
 	var helpFlag = flag.Bool("help", false, "Show usage")
+	var debugFlag = flag.Bool("debug", false, "Debug")
 
 	flag.Parse()
 
 	if *helpFlag {
 		flag.Usage()
 		return
+	}
+
+	if *debugFlag {
+		logDebug = log.Print
+		logDebugf = log.Printf
+	} else {
+		logDebug = func(v ...any) {}
+		logDebugf = func(f string, v ...any) {}
 	}
 
 	// Initialise config
@@ -223,6 +235,7 @@ func main() {
 	// Handle requests
 	dns.HandleFunc(".", makeHandler(config))
 
+	logDebugf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
 	log.Printf("Filter All: %t", config.FilterAll)
