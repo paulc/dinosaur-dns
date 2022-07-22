@@ -1,4 +1,4 @@
-module github.com/paulc/aaaa-proxy
+module github.com/paulc/aaaa_proxy
 
 go 1.18
 
