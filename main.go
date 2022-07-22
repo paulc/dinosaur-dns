@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/aaaa_proxy/proxy"
 )
 
 var logDebug func(...any)
@@ -42,11 +41,12 @@ func main() {
 	}
 
 	// Initialise config
-	config := proxy.ProxyConfig{
+	config := ProxyConfig{
 		ListenAddr:    make([]string, 0),
 		Upstream:      make([]string, 0),
 		FilterAll:     *filterAllFlag,
 		FilterDomains: make([]string, 0),
+		Cache:         NewDNSCache(),
 	}
 
 	// Get listen address
@@ -111,7 +111,7 @@ func main() {
 	}
 
 	// Handle requests
-	dns.HandleFunc(".", proxy.MakeHandler(config))
+	dns.HandleFunc(".", MakeHandler(config))
 
 	logDebugf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))

@@ -1,4 +1,4 @@
-package proxy
+package main
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ type ProxyConfig struct {
 	Upstream      []string
 	FilterAll     bool
 	FilterDomains []string
+	Cache         DNSCache
 }
 
 func matchDomain(domains []string, name string) bool {
@@ -107,6 +108,15 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 		log.Printf("%s %s", name, dns.Type(r.Question[0].Qtype).String())
 
+		// Check Cache
+		cached, found := config.Cache.Get(r.Question[0].Name, r.Question[0].Qtype)
+		if found {
+			log.Print("CACHE FOUND", cached)
+			cached.Id = r.Id
+			w.WriteMsg(cached)
+			return
+		}
+
 		for _, resolver := range config.Upstream {
 
 			var out *dns.Msg
@@ -120,6 +130,8 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 			if err == nil {
 				w.WriteMsg(out)
+				// Cache response
+				config.Cache.Add(out)
 				return
 			}
 
