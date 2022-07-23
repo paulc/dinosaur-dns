@@ -80,7 +80,7 @@ func (c *DNSCache) AddPermanent(entry string) error {
 
 func (c *DNSCache) Add(msg *dns.Msg) {
 
-	if (msg.Rcode != dns.RcodeSuccess) || (len(msg.Answer)+len(msg.Ns)+len(msg.Extra) == 0) {
+	if (msg.Rcode != dns.RcodeSuccess) || (msg.Truncated == true) || (len(msg.Answer)+len(msg.Ns)+len(msg.Extra) == 0) {
 		// Error or No RRs
 		return
 	}
