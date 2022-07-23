@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 )
@@ -22,6 +23,7 @@ func main() {
 	var filterAllFlag = flag.Bool("filter-all", false, "Filter all AAAA requests (default: false)")
 	var filterDomainFlag = flag.String("filter-domains", "", "Filter AAAA requests for matching domains (comma-separated) (default: \"\")")
 	var filterFileFlag = flag.String("filter-file", "", "Filter AAAA requests from file (default: \"\")")
+	var localRRFlag = flag.String("local-rrs", "", "File containing local DNS resource records (default: \"\")")
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var debugFlag = flag.Bool("debug", false, "Debug")
 
@@ -76,7 +78,9 @@ func main() {
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			config.FilterDomains = append(config.FilterDomains, dns.CanonicalName(scanner.Text()))
+			if err := config.Cache.AddPermanent(scanner.Text()); err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		if err := scanner.Err(); err != nil {
@@ -84,6 +88,27 @@ func main() {
 		}
 	}
 
+	// Add local cache entries
+	if len(*localRRFlag) > 0 {
+		file, err := os.Open(*localRRFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			if err := config.Cache.AddPermanent(scanner.Text()); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Start listeners
 	for _, listenAddr := range config.ListenAddr {
 		// Start UDP server
 		server_udp := &dns.Server{
@@ -112,6 +137,15 @@ func main() {
 
 	// Handle requests
 	dns.HandleFunc(".", MakeHandler(config))
+
+	// Flush cache
+	go func() {
+		for {
+			config.Cache.Debug()
+			config.Cache.Flush()
+			time.Sleep(time.Second * 5)
+		}
+	}()
 
 	logDebugf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))

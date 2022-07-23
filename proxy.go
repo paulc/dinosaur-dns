@@ -109,10 +109,9 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 		log.Printf("%s %s", name, dns.Type(r.Question[0].Qtype).String())
 
 		// Check Cache
-		cached, found := config.Cache.Get(r.Question[0].Name, r.Question[0].Qtype)
+		cached, found := config.Cache.Get(r)
 		if found {
-			log.Print("CACHE FOUND", cached)
-			cached.Id = r.Id
+			log.Print("CACHE FOUND")
 			w.WriteMsg(cached)
 			return
 		}
