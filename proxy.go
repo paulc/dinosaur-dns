@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/aaaa_proxy/cache"
 )
 
 type ProxyConfig struct {
@@ -16,7 +17,7 @@ type ProxyConfig struct {
 	Upstream      []string
 	FilterAll     bool
 	FilterDomains []string
-	Cache         DNSCache
+	Cache         cache.DNSCache
 }
 
 func matchDomain(domains []string, name string) bool {

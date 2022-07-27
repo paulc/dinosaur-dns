@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/aaaa_proxy/cache"
 )
 
 var logDebug func(...any)
@@ -48,7 +49,7 @@ func main() {
 		Upstream:      make([]string, 0),
 		FilterAll:     *filterAllFlag,
 		FilterDomains: make([]string, 0),
-		Cache:         NewDNSCache(),
+		Cache:         cache.NewDNSCache(),
 	}
 
 	// Get listen address
