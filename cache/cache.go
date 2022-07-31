@@ -9,6 +9,9 @@ import (
 	"github.com/miekg/dns"
 )
 
+// For testing
+var timeNow = time.Now
+
 type DNSCacheKey struct {
 	Name  string
 	Qtype uint16
@@ -34,7 +37,7 @@ func (i DNSCacheItem) String() string {
 		return fmt.Sprintf("<%s %s> %.1fs",
 			i.Message.Question[0].Name,
 			dns.TypeToString[i.Message.Question[0].Qtype],
-			i.Expires.Sub(time.Now()).Seconds())
+			i.Expires.Sub(timeNow()).Seconds())
 	}
 }
 
@@ -68,7 +71,7 @@ func (c *DNSCache) AddPermanent(entry string) error {
 	msg.Answer = append(msg.Answer, rr)
 
 	key := DNSCacheKey{Name: rr.Header().Name, Qtype: rr.Header().Rrtype}
-	val := DNSCacheItem{Message: msg, Inserted: time.Now(), Expires: time.Time{}, Permanent: true}
+	val := DNSCacheItem{Message: msg, Inserted: timeNow(), Expires: time.Time{}, Permanent: true}
 
 	c.Lock()
 	defer c.Unlock()
@@ -102,7 +105,7 @@ func (c *DNSCache) Add(msg *dns.Msg) {
 	}
 
 	// Calculate cache expiry time
-	now := time.Now()
+	now := timeNow()
 	expires := now.Add(time.Second * time.Duration(minTTL))
 
 	key := DNSCacheKey{Name: msg.Question[0].Name, Qtype: msg.Question[0].Qtype}
@@ -126,7 +129,7 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 		return nil, false
 	}
 
-	if !entry.Permanent && time.Now().After(entry.Expires) {
+	if !entry.Permanent && timeNow().After(entry.Expires) {
 		// Expired - flush key
 		log.Printf("Cache: %s expired", entry)
 		delete(c.Cache, key)
@@ -140,7 +143,7 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 
 	if !entry.Permanent {
 		// Decrement TTL for cached records
-		delta := uint32(time.Now().Sub(entry.Inserted).Seconds())
+		delta := uint32(timeNow().Sub(entry.Inserted).Seconds())
 		for _, section := range [][]dns.RR{reply.Answer, reply.Ns, reply.Extra} {
 			for _, v := range section {
 				v.Header().Ttl -= delta
@@ -156,7 +159,7 @@ func (c *DNSCache) Flush() {
 	c.Lock()
 	defer c.Unlock()
 
-	now := time.Now()
+	now := timeNow()
 	for k, v := range c.Cache {
 		if !v.Permanent && now.After(v.Expires) {
 			log.Printf("Cache: %s expired", k)

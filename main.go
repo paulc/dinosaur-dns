@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/aaaa_proxy/block"
 	"github.com/paulc/aaaa_proxy/cache"
 )
 
@@ -23,8 +24,9 @@ func main() {
 	var upstreamFlag = flag.String("upstream", "1.1.1.1:53", "Upstream resolver [host:port or https://...] (comma separated) (default: 1.1.1.1:53)")
 	var filterAllFlag = flag.Bool("filter-all", false, "Filter all AAAA requests (default: false)")
 	var filterDomainFlag = flag.String("filter-domains", "", "Filter AAAA requests for matching domains (comma-separated) (default: \"\")")
-	var filterFileFlag = flag.String("filter-file", "", "Filter AAAA requests from file (default: \"\")")
-	var localRRFlag = flag.String("local-rrs", "", "File containing local DNS resource records (default: \"\")")
+	var filterFileFlag = flag.String("filter-file", "", "Filter AAAA requests from file (default: none)")
+	var localRRFlag = flag.String("local-rrs", "", "File containing local DNS resource records (default: none)")
+	var blocklistFlag = flag.String("blocklist", "", "Blocklist file (default: none)")
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var debugFlag = flag.Bool("debug", false, "Debug")
 
@@ -50,6 +52,7 @@ func main() {
 		FilterAll:     *filterAllFlag,
 		FilterDomains: make([]string, 0),
 		Cache:         cache.NewDNSCache(),
+		BlockList:     block.NewTreeNode(),
 	}
 
 	// Get listen address
@@ -108,6 +111,26 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+
+	// Add blocklist
+	if len(*blocklistFlag) > 0 {
+		file, err := os.Open(*blocklistFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			config.BlockList.AddName(scanner.Text())
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	log.Printf("Blocklist: %+v\n", config.BlockList)
 
 	// Start listeners
 	for _, listenAddr := range config.ListenAddr {

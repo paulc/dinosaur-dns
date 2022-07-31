@@ -2,51 +2,55 @@ package block
 
 import (
 	"strings"
+
+	"github.com/miekg/dns"
 )
 
-// Use nil to designate leaf node
-type TreeNode struct {
-	Leaves   map[string]bool
-	Children map[string]TreeNode
+// We use a slightly modified radix trie to contain the blocklist
+// (we allow leaves at multiple levels)
+
+type TrieNode struct {
+	Leaves   map[string]uint16
+	Children map[string]TrieNode
 }
 
-func NewTreeNode() TreeNode {
-	return TreeNode{Leaves: make(map[string]bool), Children: make(map[string]TreeNode)}
+func NewTrieNode() TrieNode {
+	return TrieNode{Leaves: make(map[string]uint16), Children: make(map[string]TrieNode)}
 }
 
-func (t TreeNode) AddName(name string) {
-	parts := strings.Split(strings.ToLower(name), ".")
-	t.Add(parts[len(parts)-1], parts[:len(parts)-1])
+func (t TrieNode) AddName(name string, qtype uint16) {
+	parts := strings.Split(strings.ToLower(strings.TrimSuffix(name, ".")), ".")
+	t.Add(parts[len(parts)-1], parts[:len(parts)-1], qtype)
 }
 
-func (t TreeNode) Add(last string, rest []string) {
+func (t TrieNode) Add(last string, rest []string, qtype uint16) {
 	if len(rest) == 0 {
 		// Last element of name - insert into Leaves
-		t.Leaves[last] = true
+		t.Leaves[last] = qtype
 		return
 	}
 	// Check for next node
 	next, found := t.Children[last]
 	if !found {
-		next = NewTreeNode()
+		next = NewTrieNode()
 		t.Children[last] = next
 	}
-	next.Add(rest[len(rest)-1], rest[:len(rest)-1])
+	next.Add(rest[len(rest)-1], rest[:len(rest)-1], qtype)
 }
 
-func (t TreeNode) ContainsName(name string) bool {
-	parts := strings.Split(strings.ToLower(name), ".")
-	return t.Contains(parts[len(parts)-1], parts[:len(parts)-1])
+func (t TrieNode) MatchQ(qname string, qtype uint16) bool {
+	parts := strings.Split(strings.ToLower(strings.TrimSuffix(qname, ".")), ".")
+	return t.Match(parts[len(parts)-1], parts[:len(parts)-1], qtype)
 }
 
-func (t TreeNode) Contains(last string, rest []string) bool {
-	if t.Leaves[last] == true {
+func (t TrieNode) Match(last string, rest []string, qtype uint16) bool {
+	if v, ok := t.Leaves[last]; ok == true {
 		// Found leaf node
-		return true
+		return v == dns.TypeANY || v == qtype
 	}
 	next, found := t.Children[last]
 	if found && len(rest) > 0 {
-		return next.Contains(rest[len(rest)-1], rest[:len(rest)-1])
+		return next.Match(rest[len(rest)-1], rest[:len(rest)-1], qtype)
 	}
 	return false
 }

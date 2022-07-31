@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/aaaa_proxy/block"
 	"github.com/paulc/aaaa_proxy/cache"
 )
 
@@ -18,6 +19,7 @@ type ProxyConfig struct {
 	FilterAll     bool
 	FilterDomains []string
 	Cache         cache.DNSCache
+	BlockList     block.TreeNode
 }
 
 func matchDomain(domains []string, name string) bool {
@@ -99,7 +101,17 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 			return
 		}
 
+		// Get Qname
 		name := r.Question[0].Name
+
+		// Check blocklist
+		if config.BlockList.ContainsName(name) {
+			log.Printf("%s - BLOCKED", name)
+			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
+			return
+		}
+
+		// Check if we are filtering AAAA records
 		if (r.Question[0].Qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
 			msg := fmt.Sprintf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String())
 			log.Print(msg)
