@@ -7,7 +7,7 @@ import (
 )
 
 // We use a slightly modified radix trie to contain the blocklist
-// (we allow leaves at multiple levels)
+// (split leaves from children)
 
 type TrieNode struct {
 	Leaves   map[string]uint16
@@ -40,6 +40,10 @@ func (t TrieNode) Add(last string, rest []string, qtype uint16) {
 
 func (t TrieNode) MatchQ(qname string, qtype uint16) bool {
 	parts := strings.Split(strings.ToLower(strings.TrimSuffix(qname, ".")), ".")
+	// Check root match
+	if v, ok := t.Leaves[""]; ok == true && v == dns.TypeANY || v == qtype {
+		return true
+	}
 	return t.Match(parts[len(parts)-1], parts[:len(parts)-1], qtype)
 }
 

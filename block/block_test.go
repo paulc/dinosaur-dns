@@ -44,3 +44,14 @@ func TestBlockAAAA(t *testing.T) {
 		test_match(t, root, CheckDomainsFalse, qtype, false)
 	}
 }
+
+func TestBlockRootAAAA(t *testing.T) {
+	root := NewTrieNode()
+	for _, v := range []string{"."} {
+		root.AddName(v, dns.TypeAAAA)
+	}
+	t.Logf("root :: %+v\n", root)
+	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
+		test_match(t, root, []string{"abc.com", "xxx.yyy"}, qtype, qtype == dns.TypeAAAA)
+	}
+}
