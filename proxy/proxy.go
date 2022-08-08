@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"bytes"
@@ -14,12 +14,10 @@ import (
 )
 
 type ProxyConfig struct {
-	ListenAddr    []string
-	Upstream      []string
-	FilterAll     bool
-	FilterDomains []string
-	Cache         cache.DNSCache
-	BlockList     block.BlockList
+	ListenAddr []string
+	Upstream   []string
+	Cache      cache.DNSCache
+	BlockList  block.BlockList
 }
 
 func matchDomain(domains []string, name string) bool {
@@ -112,15 +110,7 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 			return
 		}
 
-		// Check if we are filtering AAAA records
-		if (qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
-			msg := fmt.Sprintf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String())
-			log.Print(msg)
-			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New(msg)))
-			return
-		}
-
-		log.Printf("%s %s", name, dns.Type(r.Question[0].Qtype).String())
+		log.Printf("%s %s", name, dns.Type(qtype).String())
 
 		// Check Cache
 		cached, found := config.Cache.Get(r)
