@@ -11,7 +11,7 @@ var BlockDomains = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com
 var CheckDomainsTrue = []string{"aaa.block.com", "xxx.bbb.block.com", "XXX.DDD.CCC.BLOCK.COM"}
 var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
 
-func test_match(t *testing.T, root TrieNode, names []string, qtype uint16, expected bool) {
+func test_match(t *testing.T, root BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
 		result := root.MatchQ(v, qtype)
 		t.Logf("%s %s == %t\n", v, dns.TypeToString[qtype], result)
@@ -22,7 +22,7 @@ func test_match(t *testing.T, root TrieNode, names []string, qtype uint16, expec
 }
 
 func TestBlockAny(t *testing.T) {
-	root := NewTrieNode()
+	root := NewBlockList()
 	for _, v := range BlockDomains {
 		root.AddName(v, dns.TypeANY)
 	}
@@ -34,7 +34,7 @@ func TestBlockAny(t *testing.T) {
 }
 
 func TestBlockAAAA(t *testing.T) {
-	root := NewTrieNode()
+	root := NewBlockList()
 	for _, v := range BlockDomains {
 		root.AddName(v, dns.TypeAAAA)
 	}
@@ -46,7 +46,7 @@ func TestBlockAAAA(t *testing.T) {
 }
 
 func TestBlockRootAAAA(t *testing.T) {
-	root := NewTrieNode()
+	root := NewBlockList()
 	for _, v := range []string{"."} {
 		root.AddName(v, dns.TypeAAAA)
 	}

@@ -19,7 +19,7 @@ type ProxyConfig struct {
 	FilterAll     bool
 	FilterDomains []string
 	Cache         cache.DNSCache
-	BlockList     block.TreeNode
+	BlockList     block.BlockList
 }
 
 func matchDomain(domains []string, name string) bool {
@@ -103,16 +103,17 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 		// Get Qname
 		name := r.Question[0].Name
+		qtype := r.Question[0].Qtype
 
 		// Check blocklist
-		if config.BlockList.ContainsName(name) {
+		if config.BlockList.MatchQ(name, qtype) {
 			log.Printf("%s - BLOCKED", name)
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
 			return
 		}
 
 		// Check if we are filtering AAAA records
-		if (r.Question[0].Qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
+		if (qtype == dns.TypeAAAA) && (config.FilterAll || matchDomain(config.FilterDomains, name)) {
 			msg := fmt.Sprintf("%s %s (filtered)", name, dns.Type(r.Question[0].Qtype).String())
 			log.Print(msg)
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New(msg)))

@@ -9,21 +9,21 @@ import (
 // We use a slightly modified radix trie to contain the blocklist
 // (split leaves from children)
 
-type TrieNode struct {
+type BlockList struct {
 	Leaves   map[string]uint16
-	Children map[string]TrieNode
+	Children map[string]BlockList
 }
 
-func NewTrieNode() TrieNode {
-	return TrieNode{Leaves: make(map[string]uint16), Children: make(map[string]TrieNode)}
+func NewBlockList() BlockList {
+	return BlockList{Leaves: make(map[string]uint16), Children: make(map[string]BlockList)}
 }
 
-func (t TrieNode) AddName(name string, qtype uint16) {
+func (t BlockList) AddName(name string, qtype uint16) {
 	parts := strings.Split(strings.ToLower(strings.TrimSuffix(name, ".")), ".")
 	t.Add(parts[len(parts)-1], parts[:len(parts)-1], qtype)
 }
 
-func (t TrieNode) Add(last string, rest []string, qtype uint16) {
+func (t BlockList) Add(last string, rest []string, qtype uint16) {
 	if len(rest) == 0 {
 		// Last element of name - insert into Leaves
 		t.Leaves[last] = qtype
@@ -32,13 +32,13 @@ func (t TrieNode) Add(last string, rest []string, qtype uint16) {
 	// Check for next node
 	next, found := t.Children[last]
 	if !found {
-		next = NewTrieNode()
+		next = NewBlockList()
 		t.Children[last] = next
 	}
 	next.Add(rest[len(rest)-1], rest[:len(rest)-1], qtype)
 }
 
-func (t TrieNode) MatchQ(qname string, qtype uint16) bool {
+func (t BlockList) MatchQ(qname string, qtype uint16) bool {
 	parts := strings.Split(strings.ToLower(strings.TrimSuffix(qname, ".")), ".")
 	// Check root match
 	if v, ok := t.Leaves[""]; ok == true && v == dns.TypeANY || v == qtype {
@@ -47,7 +47,7 @@ func (t TrieNode) MatchQ(qname string, qtype uint16) bool {
 	return t.Match(parts[len(parts)-1], parts[:len(parts)-1], qtype)
 }
 
-func (t TrieNode) Match(last string, rest []string, qtype uint16) bool {
+func (t BlockList) Match(last string, rest []string, qtype uint16) bool {
 	if v, ok := t.Leaves[last]; ok == true {
 		// Found leaf node
 		return v == dns.TypeANY || v == qtype

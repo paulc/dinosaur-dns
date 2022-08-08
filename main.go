@@ -52,7 +52,7 @@ func main() {
 		FilterAll:     *filterAllFlag,
 		FilterDomains: make([]string, 0),
 		Cache:         cache.NewDNSCache(),
-		BlockList:     block.NewTreeNode(),
+		BlockList:     block.NewBlockList(),
 	}
 
 	// Get listen address
@@ -122,7 +122,7 @@ func main() {
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			config.BlockList.AddName(scanner.Text())
+			config.BlockList.AddName(scanner.Text(), dns.TypeANY)
 		}
 
 		if err := scanner.Err(); err != nil {
