@@ -17,32 +17,6 @@ import (
 var logDebug func(...any)
 var logDebugf func(string, ...any)
 
-type multiFlag []string
-
-func (f *multiFlag) String() string {
-	return strings.Join(*f, ",")
-}
-
-func (f *multiFlag) Set(value string) error {
-	*f = append(*f, value)
-	return nil
-}
-
-func addBlocklistEntry(blocklist block.BlockList, entry string) {
-	split := strings.Split(entry, ":")
-	if len(split) == 1 {
-		blocklist.AddName(split[0], dns.TypeANY)
-	} else if len(split) == 2 {
-		qtype, ok := dns.StringToType[split[1]]
-		if !ok {
-			log.Fatalf("Invalid qtype: %s:%s", split[0], split[1])
-		}
-		blocklist.AddName(split[0], qtype)
-	} else {
-		log.Fatalf("Invalid blocklist entry: %s", strings.Join(split, ":"))
-	}
-}
-
 func main() {
 
 	// Command line flags
@@ -54,15 +28,15 @@ func main() {
 	var blockFlag multiFlag
 	var blocklistFlag multiFlag
 	var upstreamFlag multiFlag
-	var localRRFlag multiFlag
-	var localRRFileFlag multiFlag
+	var localZoneFlag multiFlag
+	var localZoneFileFlag multiFlag
 
 	flag.Var(&listenFlag, "listen", "Listen address (default: 127.0.0.1:8053)")
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53)")
 	flag.Var(&blockFlag, "block", "Block entry (format: 'domain[:qtype]')")
 	flag.Var(&blocklistFlag, "blocklist", "Blocklist file")
-	flag.Var(&localRRFlag, "localrr", "Local DNS resource record")
-	flag.Var(&localRRFileFlag, "localrrfile", "Local DNS resource record file")
+	flag.Var(&localZoneFlag, "local", "Local DNS resource record")
+	flag.Var(&localZoneFileFlag, "localzone", "Local DNS resource record file")
 
 	flag.Parse()
 
@@ -106,13 +80,13 @@ func main() {
 	}
 
 	// Add local cache entries
-	for _, v := range localRRFlag {
+	for _, v := range localZoneFlag {
 		if err := config.Cache.AddPermanent(v); err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	for _, v := range localRRFileFlag {
+	for _, v := range localZoneFileFlag {
 		file, err := os.Open(v)
 		if err != nil {
 			log.Fatal(err)
@@ -137,20 +111,7 @@ func main() {
 	}
 
 	for _, v := range blocklistFlag {
-		file, err := os.Open(v)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			addBlocklistEntry(config.BlockList, scanner.Text())
-		}
-
-		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
-		}
+		addBlocklistFromFile(config.BlockList, v)
 	}
 
 	// Start listeners

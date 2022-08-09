@@ -61,6 +61,12 @@ func (c *DNSCache) AddPermanent(entry string) error {
 	if err != nil {
 		return err
 	}
+
+	if rr == nil {
+		// No RR
+		return nil
+	}
+
 	// Construct template reply
 	msg := new(dns.Msg)
 	msg.SetQuestion(rr.Header().Name, rr.Header().Rrtype)
