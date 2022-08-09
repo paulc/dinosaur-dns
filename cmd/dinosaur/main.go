@@ -27,6 +27,7 @@ func main() {
 	var listenFlag multiFlag
 	var blockFlag multiFlag
 	var blocklistFlag multiFlag
+	var blocklistHostsFlag multiFlag
 	var upstreamFlag multiFlag
 	var localZoneFlag multiFlag
 	var localZoneFileFlag multiFlag
@@ -35,6 +36,7 @@ func main() {
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53)")
 	flag.Var(&blockFlag, "block", "Block entry (format: 'domain[:qtype]')")
 	flag.Var(&blocklistFlag, "blocklist", "Blocklist file")
+	flag.Var(&blocklistHostsFlag, "blocklist-from-hosts", "Blocklist from /etc/hosts format file")
 	flag.Var(&localZoneFlag, "local", "Local DNS resource record")
 	flag.Var(&localZoneFileFlag, "localzone", "Local DNS resource record file")
 
@@ -114,6 +116,10 @@ func main() {
 		addBlocklistFromFile(config.BlockList, v)
 	}
 
+	for _, v := range blocklistHostsFlag {
+		addBlocklistFromHostsFile(config.BlockList, v)
+	}
+
 	// Start listeners
 	for _, listenAddr := range config.ListenAddr {
 		// Start UDP server
@@ -153,10 +159,10 @@ func main() {
 		}
 	}()
 
-	logDebugf("Config: %+v", config)
+	// logDebugf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
-	log.Printf("Blocklist: %+v\n", config.BlockList)
+	log.Printf("Blocklist: %d entries", config.BlockList.Count())
 
 	// Wait
 	select {}

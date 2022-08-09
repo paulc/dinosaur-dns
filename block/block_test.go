@@ -14,11 +14,23 @@ var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
 func test_match(t *testing.T, root BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
 		result := root.MatchQ(v, qtype)
-		t.Logf("%s %s == %t\n", v, dns.TypeToString[qtype], result)
+		t.Logf("%s %s == %t", v, dns.TypeToString[qtype], result)
 		if result != expected {
-			t.Errorf("%s %s == %t (expected %t)\n", v, dns.TypeToString[qtype], result, expected)
+			t.Errorf("%s %s == %t (expected %t)", v, dns.TypeToString[qtype], result, expected)
 		}
 	}
+}
+
+func TestBlockCount(t *testing.T) {
+	root := NewBlockList()
+	for _, v := range BlockDomains {
+		root.AddName(v, dns.TypeANY)
+	}
+	t.Logf("root :: %+v", root)
+	if root.Count() != len(BlockDomains) {
+		t.Errorf("root.Count() = %d (expected %d)", root.Count(), len(BlockDomains))
+	}
+	t.Logf("root :: count = %d", root.Count())
 }
 
 func TestBlockAny(t *testing.T) {
@@ -26,7 +38,7 @@ func TestBlockAny(t *testing.T) {
 	for _, v := range BlockDomains {
 		root.AddName(v, dns.TypeANY)
 	}
-	t.Logf("root :: %+v\n", root)
+	t.Logf("root :: %+v", root)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
 		test_match(t, root, CheckDomainsTrue, qtype, true)
 		test_match(t, root, CheckDomainsFalse, qtype, false)
@@ -38,7 +50,7 @@ func TestBlockAAAA(t *testing.T) {
 	for _, v := range BlockDomains {
 		root.AddName(v, dns.TypeAAAA)
 	}
-	t.Logf("root :: %+v\n", root)
+	t.Logf("root :: %+v", root)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
 		test_match(t, root, CheckDomainsTrue, qtype, qtype == dns.TypeAAAA)
 		test_match(t, root, CheckDomainsFalse, qtype, false)
@@ -50,7 +62,7 @@ func TestBlockRootAAAA(t *testing.T) {
 	for _, v := range []string{"."} {
 		root.AddName(v, dns.TypeAAAA)
 	}
-	t.Logf("root :: %+v\n", root)
+	t.Logf("root :: %+v", root)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
 		test_match(t, root, []string{"abc.com", "xxx.yyy"}, qtype, qtype == dns.TypeAAAA)
 	}

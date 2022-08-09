@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -47,6 +48,14 @@ func addBlocklistFromFile(blocklist block.BlockList, f string) {
 	}
 }
 
+func splitHostsEntry(entry string) (ip, domain string, err error) {
+	split := strings.Split(entry, " ")
+	if len(split) == 1 {
+		return "", "", fmt.Errorf("Invalid hosts entry: %s", entry)
+	}
+	return split[0], split[1], nil
+}
+
 func addBlocklistFromHostsFile(blocklist block.BlockList, f string) {
 	file, err := os.Open(f)
 	if err != nil {
@@ -62,7 +71,18 @@ func addBlocklistFromHostsFile(blocklist block.BlockList, f string) {
 			continue
 		}
 
-		addBlocklistEntry(blocklist, scanner.Text())
+		// Split into IP / Domain pair
+		ip, domain, err := splitHostsEntry(line)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Skip unless IP is 0.0.0.0
+		if ip != "0.0.0.0" || domain == "0.0.0.0" {
+			continue
+		}
+
+		addBlocklistEntry(blocklist, domain)
 	}
 
 	if err := scanner.Err(); err != nil {

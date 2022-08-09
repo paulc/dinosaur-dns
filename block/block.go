@@ -58,3 +58,11 @@ func (t BlockList) Match(last string, rest []string, qtype uint16) bool {
 	}
 	return false
 }
+
+func (t BlockList) Count() (total int) {
+	for _, v := range t.Children {
+		total += v.Count()
+	}
+	total += len(t.Leaves)
+	return
+}
