@@ -1,0 +1,7 @@
+netflix.com:AAAA
+nflxext.com:AAAA
+nflximg.net:AAAA
+nflximg.com:AAAA
+nflxsearch.net:AAAA
+nflxso.net:AAAA
+nflxvideo.net:AAAA
