@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -27,15 +26,17 @@ func main() {
 	var listenFlag multiFlag
 	var blockFlag multiFlag
 	var blocklistFlag multiFlag
+	var blocklistAAAAFlag multiFlag
 	var blocklistHostsFlag multiFlag
 	var upstreamFlag multiFlag
 	var localZoneFlag multiFlag
 	var localZoneFileFlag multiFlag
 
 	flag.Var(&listenFlag, "listen", "Listen address (default: 127.0.0.1:8053)")
-	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53)")
+	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
 	flag.Var(&blockFlag, "block", "Block entry (format: 'domain[:qtype]')")
 	flag.Var(&blocklistFlag, "blocklist", "Blocklist file")
+	flag.Var(&blocklistAAAAFlag, "blocklist-aaaa", "Blocklist file (AAAA)")
 	flag.Var(&blocklistHostsFlag, "blocklist-from-hosts", "Blocklist from /etc/hosts format file")
 	flag.Var(&localZoneFlag, "local", "Local DNS resource record")
 	flag.Var(&localZoneFileFlag, "localzone", "Local DNS resource record file")
@@ -75,6 +76,7 @@ func main() {
 	// Get upstream resolvers
 	if len(upstreamFlag) == 0 {
 		config.Upstream = append(config.Upstream, "1.1.1.1:53")
+		config.Upstream = append(config.Upstream, "1.0.0.1:53")
 	} else {
 		for _, v := range upstreamFlag {
 			config.Upstream = append(config.Upstream, v)
@@ -89,7 +91,7 @@ func main() {
 	}
 
 	for _, v := range localZoneFileFlag {
-		file, err := os.Open(v)
+		file, err := urlGet(v)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -109,11 +111,15 @@ func main() {
 
 	// Add block entries
 	for _, v := range blockFlag {
-		addBlocklistEntry(config.BlockList, v)
+		addBlocklistEntry(config.BlockList, v, dns.TypeANY)
 	}
 
 	for _, v := range blocklistFlag {
-		addBlocklistFromFile(config.BlockList, v)
+		addBlocklistFromFile(config.BlockList, v, dns.TypeANY)
+	}
+
+	for _, v := range blocklistAAAAFlag {
+		addBlocklistFromFile(config.BlockList, v, dns.TypeAAAA)
 	}
 
 	for _, v := range blocklistHostsFlag {

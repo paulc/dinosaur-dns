@@ -36,3 +36,5 @@ Usage of dinosaur:
   -upstream value
     	Upstream resolver [host:port or https://...] (default: 1.1.1.1:53)
 ```
+
+(Netflix domains: https://openconnect.netflix.com/mobiledeliverydomains.txt)

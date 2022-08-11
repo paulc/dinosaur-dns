@@ -4,17 +4,16 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/aaaa_proxy/block"
 )
 
-func addBlocklistEntry(blocklist block.BlockList, entry string) {
+func addBlocklistEntry(blocklist block.BlockList, entry string, default_qtype uint16) {
 	split := strings.Split(entry, ":")
 	if len(split) == 1 {
-		blocklist.AddName(split[0], dns.TypeANY)
+		blocklist.AddName(split[0], default_qtype)
 	} else if len(split) == 2 {
 		qtype, ok := dns.StringToType[split[1]]
 		if !ok {
@@ -26,8 +25,8 @@ func addBlocklistEntry(blocklist block.BlockList, entry string) {
 	}
 }
 
-func addBlocklistFromFile(blocklist block.BlockList, f string) {
-	file, err := os.Open(f)
+func addBlocklistFromFile(blocklist block.BlockList, f string, default_qtype uint16) {
+	file, err := urlGet(f)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,7 +39,7 @@ func addBlocklistFromFile(blocklist block.BlockList, f string) {
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
-		addBlocklistEntry(blocklist, scanner.Text())
+		addBlocklistEntry(blocklist, scanner.Text(), default_qtype)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -57,7 +56,7 @@ func splitHostsEntry(entry string) (ip, domain string, err error) {
 }
 
 func addBlocklistFromHostsFile(blocklist block.BlockList, f string) {
-	file, err := os.Open(f)
+	file, err := urlGet(f)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,7 +81,7 @@ func addBlocklistFromHostsFile(blocklist block.BlockList, f string) {
 			continue
 		}
 
-		addBlocklistEntry(blocklist, domain)
+		addBlocklistEntry(blocklist, domain, dns.TypeANY)
 	}
 
 	if err := scanner.Err(); err != nil {
