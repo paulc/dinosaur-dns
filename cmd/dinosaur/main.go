@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -15,6 +16,13 @@ import (
 
 var logDebug func(...any)
 var logDebugf func(string, ...any)
+
+func ACLToString(acl []net.IPNet) (out []string) {
+	for _, v := range acl {
+		out = append(out, v.String())
+	}
+	return
+}
 
 func main() {
 
@@ -31,6 +39,7 @@ func main() {
 	var upstreamFlag multiFlag
 	var localZoneFlag multiFlag
 	var localZoneFileFlag multiFlag
+	var aclFlag multiFlag
 
 	flag.Var(&listenFlag, "listen", "Listen address (default: 127.0.0.1:8053)")
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
@@ -40,6 +49,7 @@ func main() {
 	flag.Var(&blocklistHostsFlag, "blocklist-from-hosts", "Blocklist from /etc/hosts format file")
 	flag.Var(&localZoneFlag, "local", "Local DNS resource record")
 	flag.Var(&localZoneFileFlag, "localzone", "Local DNS resource record file")
+	flag.Var(&aclFlag, "acl", "Access control list (CIDR)")
 
 	flag.Parse()
 
@@ -91,7 +101,7 @@ func main() {
 	}
 
 	for _, v := range localZoneFileFlag {
-		file, err := urlGet(v)
+		file, err := Urlopen(v)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -124,6 +134,14 @@ func main() {
 
 	for _, v := range blocklistHostsFlag {
 		addBlocklistFromHostsFile(config.BlockList, v)
+	}
+
+	for _, v := range aclFlag {
+		_, cidr, err := net.ParseCIDR(v)
+		if err != nil {
+			log.Fatalf("ACL Error (%s): %s", v, err)
+		}
+		config.ACL = append(config.ACL, *cidr)
 	}
 
 	// Start listeners
@@ -169,6 +187,7 @@ func main() {
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
 	log.Printf("Blocklist: %d entries", config.BlockList.Count())
+	log.Printf("ACL: %s", strings.Join(ACLToString(config.ACL), " "))
 
 	// Wait
 	select {}

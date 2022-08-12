@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 
@@ -18,6 +19,7 @@ type ProxyConfig struct {
 	Upstream   []string
 	Cache      cache.DNSCache
 	BlockList  block.BlockList
+	ACL        []net.IPNet
 }
 
 func matchDomain(domains []string, name string) bool {
