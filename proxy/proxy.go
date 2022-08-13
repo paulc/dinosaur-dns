@@ -96,8 +96,36 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 	return func(w dns.ResponseWriter, r *dns.Msg) {
 
+		clientAddr := w.RemoteAddr().String()
+		clientHost, _, err := net.SplitHostPort(clientAddr)
+
+		if err != nil {
+			log.Printf("Error parsing address <%s>: %s", clientAddr, err)
+			w.Close()
+		}
+
+		clientIP := net.ParseIP(clientHost)
+
+		log.Printf("Connection: %s", clientIP)
+
+		if len(config.ACL) > 0 {
+			allowed := false
+			for _, v := range config.ACL {
+				if v.Contains(clientIP) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				log.Printf("%s invalid ACL", clientIP)
+				w.Close()
+				return
+			}
+		}
+
 		if len(r.Question) != 1 {
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeFormatError, errors.New("Invalid question")))
+			w.Close()
 			return
 		}
 
@@ -109,6 +137,7 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 		if config.BlockList.MatchQ(name, qtype) {
 			log.Printf("%s - BLOCKED", name)
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
+			w.Close()
 			return
 		}
 
@@ -119,6 +148,7 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 		if found {
 			log.Print("CACHE FOUND")
 			w.WriteMsg(cached)
+			w.Close()
 			return
 		}
 
@@ -144,5 +174,6 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 		}
 		w.WriteMsg(dnsErrorResponse(r, dns.RcodeServerFailure, errors.New("Upstream error")))
+		w.Close()
 	}
 }
