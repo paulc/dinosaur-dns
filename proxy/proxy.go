@@ -15,11 +15,12 @@ import (
 )
 
 type ProxyConfig struct {
-	ListenAddr []string
-	Upstream   []string
-	Cache      cache.DNSCache
-	BlockList  block.BlockList
-	ACL        []net.IPNet
+	ListenAddr  []string
+	Upstream    []string
+	UpstreamErr int
+	Cache       cache.DNSCache
+	BlockList   block.BlockList
+	ACL         []net.IPNet
 }
 
 func matchDomain(domains []string, name string) bool {
@@ -92,6 +93,22 @@ func dnsErrorResponse(r *dns.Msg, rcode int, err error) *dns.Msg {
 	return m
 }
 
+func checkACL(acl []net.IPNet, client net.IP) bool {
+
+	// Default to permit all if no ACL set
+	if len(acl) == 0 {
+		return true
+	}
+
+	for _, v := range acl {
+		if v.Contains(client) {
+			return true
+		}
+	}
+	return false
+
+}
+
 func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 	return func(w dns.ResponseWriter, r *dns.Msg) {
@@ -100,31 +117,22 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 		clientHost, _, err := net.SplitHostPort(clientAddr)
 
 		if err != nil {
-			log.Printf("Error parsing address <%s>: %s", clientAddr, err)
+			log.Printf("Connection: %s [client address error]", clientHost)
 			w.Close()
+			return
 		}
 
 		clientIP := net.ParseIP(clientHost)
 
-		log.Printf("Connection: %s", clientIP)
-
-		if len(config.ACL) > 0 {
-			allowed := false
-			for _, v := range config.ACL {
-				if v.Contains(clientIP) {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				log.Printf("%s invalid ACL", clientIP)
-				w.Close()
-				return
-			}
+		if !checkACL(config.ACL, clientIP) {
+			log.Printf("Connection: %s [refused]", clientIP)
+			// Close connection
+			w.Close()
+			return
 		}
 
 		if len(r.Question) != 1 {
-			w.WriteMsg(dnsErrorResponse(r, dns.RcodeFormatError, errors.New("Invalid question")))
+			log.Printf("Connection: %s [invalid question]", clientIP)
 			w.Close()
 			return
 		}
@@ -135,24 +143,21 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 		// Check blocklist
 		if config.BlockList.MatchQ(name, qtype) {
-			log.Printf("%s - BLOCKED", name)
+			log.Printf("Connection: %s <%s %s> [blocked]", clientIP, name, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
 			w.Close()
 			return
 		}
 
-		log.Printf("%s %s", name, dns.Type(qtype).String())
-
 		// Check Cache
 		cached, found := config.Cache.Get(r)
 		if found {
-			log.Print("CACHE FOUND")
+			log.Printf("Connection: %s <%s %s> [cached]", clientIP, name, dns.TypeToString[qtype])
 			w.WriteMsg(cached)
-			w.Close()
 			return
 		}
 
-		for _, resolver := range config.Upstream {
+		for i, resolver := range config.Upstream {
 
 			var out *dns.Msg
 			var err error
@@ -167,13 +172,30 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 				w.WriteMsg(out)
 				// Cache response
 				config.Cache.Add(out)
+				// If this is the first upstream clear the error count
+				if i == 0 {
+					config.UpstreamErr = 0
+				}
+				log.Printf("Connection: %s <%s %s> [ok]", clientIP, name, dns.TypeToString[qtype])
 				return
 			}
 
+			// Upstream error
+
+			// If this is the first upstream we count errors and try to switch if threshold exceeded
+			if i == 0 {
+				config.UpstreamErr += 1
+				if config.UpstreamErr > 3 {
+					// Demote upstream
+					config.Upstream = append(config.Upstream[1:], config.Upstream[0])
+					log.Printf("Threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
+				}
+
+			}
 			log.Print(err)
 
 		}
+		log.Printf("Connection: %s <%s %s> [upstream error]", clientIP, name, dns.TypeToString[qtype])
 		w.WriteMsg(dnsErrorResponse(r, dns.RcodeServerFailure, errors.New("Upstream error")))
-		w.Close()
 	}
 }
