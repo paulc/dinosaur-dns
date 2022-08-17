@@ -1,0 +1,8 @@
+
+[ ] More flexible listen address (default :53 / v4/v6 only default address)
+[ ] More flexible logging
+[ ] JSON config
+[ ] Lock blocklist updates
+[ ] API
+[ ] Dashboard
+[ ] Device Stats
