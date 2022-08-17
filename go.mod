@@ -1,4 +1,4 @@
-module github.com/paulc/aaaa_proxy
+module github.com/paulc/dinosaur
 
 go 1.18
 

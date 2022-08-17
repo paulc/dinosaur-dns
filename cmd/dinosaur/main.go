@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/aaaa_proxy/block"
-	"github.com/paulc/aaaa_proxy/cache"
-	"github.com/paulc/aaaa_proxy/proxy"
+	"github.com/paulc/dinosaur/block"
+	"github.com/paulc/dinosaur/cache"
+	"github.com/paulc/dinosaur/proxy"
 )
 
 var logDebug func(...any)

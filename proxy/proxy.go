@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/aaaa_proxy/block"
-	"github.com/paulc/aaaa_proxy/cache"
+	"github.com/paulc/dinosaur/block"
+	"github.com/paulc/dinosaur/cache"
 )
 
 type ProxyConfig struct {

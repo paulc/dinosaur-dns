@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/aaaa_proxy/block"
+	"github.com/paulc/dinosaur/block"
 )
 
 func addBlocklistEntry(blocklist block.BlockList, entry string, default_qtype uint16) {
