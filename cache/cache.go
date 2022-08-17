@@ -42,11 +42,14 @@ func (i DNSCacheItem) String() string {
 }
 
 type DNSCache struct {
-	sync.Mutex
+	sync.RWMutex
 	Cache map[DNSCacheKey]DNSCacheItem
 }
 
 func (c *DNSCache) Debug() {
+	c.Lock()
+	defer c.Unlock()
+
 	for _, v := range c.Cache {
 		log.Printf("Cache: %s", v)
 	}
@@ -68,15 +71,16 @@ func (c *DNSCache) AddPermanent(entry string) error {
 	}
 
 	// Construct template reply
+	name := dns.CanonicalName(rr.Header().Name)
 	msg := new(dns.Msg)
-	msg.SetQuestion(rr.Header().Name, rr.Header().Rrtype)
+	msg.SetQuestion(name, rr.Header().Rrtype)
 	msg.Response = true
 	msg.Authoritative = true
 	msg.RecursionAvailable = true
 	msg.Rcode = dns.RcodeSuccess
 	msg.Answer = append(msg.Answer, rr)
 
-	key := DNSCacheKey{Name: rr.Header().Name, Qtype: rr.Header().Rrtype}
+	key := DNSCacheKey{Name: name, Qtype: rr.Header().Rrtype}
 	val := DNSCacheItem{Message: msg, Inserted: timeNow(), Expires: time.Time{}, Permanent: true}
 
 	c.Lock()
@@ -114,7 +118,7 @@ func (c *DNSCache) Add(msg *dns.Msg) {
 	now := timeNow()
 	expires := now.Add(time.Second * time.Duration(minTTL))
 
-	key := DNSCacheKey{Name: msg.Question[0].Name, Qtype: msg.Question[0].Qtype}
+	key := DNSCacheKey{Name: dns.CanonicalName(msg.Question[0].Name), Qtype: msg.Question[0].Qtype}
 	val := DNSCacheItem{Message: msg, Inserted: now, Expires: expires, Permanent: false}
 
 	c.Lock()
@@ -125,10 +129,10 @@ func (c *DNSCache) Add(msg *dns.Msg) {
 
 func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 
-	key := DNSCacheKey{Name: query.Question[0].Name, Qtype: query.Question[0].Qtype}
-
 	c.Lock()
 	defer c.Unlock()
+
+	key := DNSCacheKey{Name: dns.CanonicalName(query.Question[0].Name), Qtype: query.Question[0].Qtype}
 
 	entry, found := c.Cache[key]
 	if !found {
@@ -137,7 +141,7 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 
 	if !entry.Permanent && timeNow().After(entry.Expires) {
 		// Expired - flush key
-		log.Printf("Cache: %s expired", entry)
+		// log.Printf("Cache: %s expired", entry)
 		delete(c.Cache, key)
 		return nil, false
 	}
@@ -160,7 +164,7 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 	return reply, true
 }
 
-func (c *DNSCache) Flush() {
+func (c *DNSCache) Flush() (count int) {
 
 	c.Lock()
 	defer c.Unlock()
@@ -168,8 +172,10 @@ func (c *DNSCache) Flush() {
 	now := timeNow()
 	for k, v := range c.Cache {
 		if !v.Permanent && now.After(v.Expires) {
-			log.Printf("Cache: %s expired", k)
+			// log.Printf("Cache: %s expired", k)
 			delete(c.Cache, k)
+			count++
 		}
 	}
+	return
 }

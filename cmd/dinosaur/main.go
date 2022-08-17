@@ -177,7 +177,6 @@ func main() {
 	// Flush cache
 	go func() {
 		for {
-			config.Cache.Debug()
 			config.Cache.Flush()
 			time.Sleep(time.Second * 5)
 		}

@@ -138,7 +138,7 @@ func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 		}
 
 		// Get Qname
-		name := r.Question[0].Name
+		name := dns.CanonicalName(r.Question[0].Name)
 		qtype := r.Question[0].Qtype
 
 		// Check blocklist
