@@ -13,11 +13,11 @@ import (
 type BlockList struct {
 	sync.RWMutex
 	Leaves   map[string]uint16
-	Children map[string]BlockList
+	Children map[string]*BlockList
 }
 
-func NewBlockList() BlockList {
-	return BlockList{Leaves: make(map[string]uint16), Children: make(map[string]BlockList)}
+func NewBlockList() *BlockList {
+	return &BlockList{Leaves: make(map[string]uint16), Children: make(map[string]*BlockList)}
 }
 
 func (t BlockList) AddName(name string, qtype uint16) {

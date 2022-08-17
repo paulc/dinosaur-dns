@@ -45,8 +45,8 @@ type DNSCache struct {
 	Cache map[DNSCacheKey]DNSCacheItem
 }
 
-func NewDNSCache() DNSCache {
-	return DNSCache{Cache: make(map[DNSCacheKey]DNSCacheItem)}
+func NewDNSCache() *DNSCache {
+	return &DNSCache{Cache: make(map[DNSCacheKey]DNSCacheItem)}
 }
 
 func (c *DNSCache) AddPermanent(entry string) error {

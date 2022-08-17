@@ -10,7 +10,7 @@ import (
 	"github.com/paulc/dinosaur/block"
 )
 
-func addBlocklistEntry(blocklist block.BlockList, entry string, default_qtype uint16) {
+func addBlocklistEntry(blocklist *block.BlockList, entry string, default_qtype uint16) {
 	split := strings.Split(entry, ":")
 	if len(split) == 1 {
 		blocklist.AddName(split[0], default_qtype)
@@ -25,7 +25,7 @@ func addBlocklistEntry(blocklist block.BlockList, entry string, default_qtype ui
 	}
 }
 
-func addBlocklistFromFile(blocklist block.BlockList, f string, default_qtype uint16) {
+func addBlocklistFromFile(blocklist *block.BlockList, f string, default_qtype uint16) {
 	file, err := Urlopen(f)
 	if err != nil {
 		log.Fatal(err)
@@ -55,7 +55,7 @@ func splitHostsEntry(entry string) (ip, domain string, err error) {
 	return split[0], split[1], nil
 }
 
-func addBlocklistFromHostsFile(blocklist block.BlockList, f string) {
+func addBlocklistFromHostsFile(blocklist *block.BlockList, f string) {
 	file, err := Urlopen(f)
 	if err != nil {
 		log.Fatal(err)

@@ -18,8 +18,8 @@ type ProxyConfig struct {
 	ListenAddr  []string
 	Upstream    []string
 	UpstreamErr int
-	Cache       cache.DNSCache
-	BlockList   block.BlockList
+	Cache       *cache.DNSCache
+	BlockList   *block.BlockList
 	ACL         []net.IPNet
 }
 

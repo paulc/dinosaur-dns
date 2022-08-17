@@ -11,7 +11,7 @@ var BlockDomains = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com
 var CheckDomainsTrue = []string{"aaa.block.com", "xxx.bbb.block.com", "XXX.DDD.CCC.BLOCK.COM"}
 var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
 
-func test_match(t *testing.T, root BlockList, names []string, qtype uint16, expected bool) {
+func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
 		result := root.MatchQ(v, qtype)
 		t.Logf("%s %s == %t", v, dns.TypeToString[qtype], result)
