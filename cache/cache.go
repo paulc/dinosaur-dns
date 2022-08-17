@@ -2,7 +2,6 @@ package cache
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -44,15 +43,6 @@ func (i DNSCacheItem) String() string {
 type DNSCache struct {
 	sync.RWMutex
 	Cache map[DNSCacheKey]DNSCacheItem
-}
-
-func (c *DNSCache) Debug() {
-	c.Lock()
-	defer c.Unlock()
-
-	for _, v := range c.Cache {
-		log.Printf("Cache: %s", v)
-	}
 }
 
 func NewDNSCache() DNSCache {
@@ -164,17 +154,18 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 	return reply, true
 }
 
-func (c *DNSCache) Flush() (count int) {
+func (c *DNSCache) Flush() (total, expired int) {
 
 	c.Lock()
 	defer c.Unlock()
 
 	now := timeNow()
 	for k, v := range c.Cache {
+		total++
 		if !v.Permanent && now.After(v.Expires) {
 			// log.Printf("Cache: %s expired", k)
 			delete(c.Cache, k)
-			count++
+			expired++
 		}
 	}
 	return

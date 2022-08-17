@@ -177,7 +177,8 @@ func main() {
 	// Flush cache
 	go func() {
 		for {
-			config.Cache.Flush()
+			total, expired := config.Cache.Flush()
+			log.Printf("Cache: %d/%d (total/expired)", total, expired)
 			time.Sleep(time.Second * 5)
 		}
 	}()

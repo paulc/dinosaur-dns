@@ -115,20 +115,20 @@ func TestExpire(t *testing.T) {
 	t.Logf("Cache: %d items", len(cache.Cache))
 
 	// Shouldnt flush any entries
-	cache.Flush()
+	total, expired := cache.Flush()
 	if len(cache.Cache) != 100 {
 		t.Errorf("Invalid # cache items: %d", len(cache.Cache))
 	}
-	t.Logf("Cache: %d items", len(cache.Cache))
+	t.Logf("Cache: %d/%d items", total, expired)
 
 	// Jump forward time
 	now = now.Add(time.Second * 100)
 	// Should flush all entries
-	cache.Flush()
+	total, expired = cache.Flush()
 	if len(cache.Cache) != 0 {
 		t.Errorf("Invalid # cache items: %d", len(cache.Cache))
 	}
-	t.Logf("Cache: %d items", len(cache.Cache))
+	t.Logf("Cache: %d/%d items", total, expired)
 }
 
 func TestConcurrent(t *testing.T) {
@@ -155,7 +155,8 @@ func TestConcurrent(t *testing.T) {
 
 	go func() {
 		for {
-			t.Logf("Flush: %d", cache.Flush())
+			total, expired := cache.Flush()
+			t.Logf("Cache: %d/%d (total/expired)", total, expired)
 			time.Sleep(time.Millisecond * 500)
 		}
 	}()
