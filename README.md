@@ -15,13 +15,13 @@ The server was origibally written as a simple upstream for Unbound which wouuld 
 
 ## Features
 
-    * UDP/DoH upstreams
-    * In-memory caching
-    * Local authorative entries (implemented as permament cache entries)
-    * Qtype aware blocklist (can block specific query-types - in particular AAAA for specific domains) - default is ANY
-    * Parse blocklist from hosts file (eg. https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts for example)
-    * Load blocklist/local zones from URL 
-    * ACL
+* UDP/DoH upstreams
+* In-memory caching
+* Local authorative entries (implemented as permament cache entries)
+* Qtype aware blocklist (can block specific query-types - in particular AAAA for specific domains) - default is ANY
+* Parse blocklist from hosts file (eg. https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts for example)
+* Load blocklist/local zones from URL 
+* ACL
 
 ## Usage
 
