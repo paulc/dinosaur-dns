@@ -79,7 +79,13 @@ func main() {
 		config.ListenAddr = append(config.ListenAddr, "127.0.0.1:8053")
 	} else {
 		for _, v := range listenFlag {
-			config.ListenAddr = append(config.ListenAddr, v)
+			addrs, err := parseListenAddr(v)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, v := range addrs {
+				config.ListenAddr = append(config.ListenAddr, v)
+			}
 		}
 	}
 
