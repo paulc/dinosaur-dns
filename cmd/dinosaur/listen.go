@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -62,7 +61,6 @@ func isV4Global(hostport string) bool {
 
 func isV6Global(hostport string) bool {
 	host, _, _ := net.SplitHostPort(hostport)
-	fmt.Println(">>", host)
 	return host == "::" || host == "::0"
 }
 

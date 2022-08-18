@@ -152,10 +152,21 @@ func main() {
 
 	// Start listeners
 	for _, listenAddr := range config.ListenAddr {
+
+		net_udp, net_tcp := "udp", "tcp"
+
+		// Avoid global addresses listening on IPv4 & IPv6
+		if isV4Global(listenAddr) {
+			net_udp, net_tcp = "udp4", "tcp4"
+		}
+		if isV6Global(listenAddr) {
+			net_udp, net_tcp = "udp6", "tcp6"
+		}
+
 		// Start UDP server
 		server_udp := &dns.Server{
 			Addr: listenAddr,
-			Net:  "udp",
+			Net:  net_udp,
 		}
 
 		go func() {
@@ -167,7 +178,7 @@ func main() {
 		// Start TCP server
 		server_tcp := &dns.Server{
 			Addr: listenAddr,
-			Net:  "tcp",
+			Net:  net_tcp,
 		}
 
 		go func() {
