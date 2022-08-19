@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/block"
-	"github.com/paulc/dinosaur/cache"
+	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
 )
 
@@ -67,32 +66,25 @@ func main() {
 	}
 
 	// Initialise config
-	config := proxy.ProxyConfig{
-		ListenAddr: make([]string, 0),
-		Upstream:   make([]string, 0),
-		Cache:      cache.NewDNSCache(),
-		BlockList:  block.NewBlockList(),
-	}
+	config := config.NewProxyConfig()
 
 	// Get listen address
 	if len(listenFlag) == 0 {
-		config.ListenAddr = append(config.ListenAddr, "127.0.0.1:8053")
+		if err := config.AddListenAddr("127.0.0.1:8053"); err != nil {
+			log.Fatal(err)
+		}
 	} else {
 		for _, v := range listenFlag {
-			addrs, err := parseListenAddr(v)
-			if err != nil {
+			if err := config.AddListenAddr(v); err != nil {
 				log.Fatal(err)
-			}
-			for _, v := range addrs {
-				config.ListenAddr = append(config.ListenAddr, v)
 			}
 		}
 	}
 
 	// Get upstream resolvers
 	if len(upstreamFlag) == 0 {
-		config.Upstream = append(config.Upstream, "1.1.1.1:53")
-		config.Upstream = append(config.Upstream, "1.0.0.1:53")
+		config.AddUpstream("1.1.1.1:53")
+		config.AddUpstream("1.0.0.1:53")
 	} else {
 		for _, v := range upstreamFlag {
 			config.Upstream = append(config.Upstream, v)

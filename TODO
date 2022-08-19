@@ -1,7 +1,7 @@
 
-[ ] More flexible listen address (default :53 / v4/v6 only default address)
-[ ] More flexible logging
+[x] More flexible listen address (default :53 / v4/v6 only default address)
 [ ] JSON config
+[ ] More flexible logging
 [ ] DNS64
 [ ] Lock blocklist updates
 [ ] API

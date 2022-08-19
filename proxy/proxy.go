@@ -10,18 +10,8 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/block"
-	"github.com/paulc/dinosaur/cache"
+	"github.com/paulc/dinosaur/config"
 )
-
-type ProxyConfig struct {
-	ListenAddr  []string
-	Upstream    []string
-	UpstreamErr int
-	Cache       *cache.DNSCache
-	BlockList   *block.BlockList
-	ACL         []net.IPNet
-}
 
 func matchDomain(domains []string, name string) bool {
 	for _, domain := range domains {
@@ -109,7 +99,7 @@ func checkACL(acl []net.IPNet, client net.IP) bool {
 
 }
 
-func MakeHandler(config ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
+func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
 	return func(w dns.ResponseWriter, r *dns.Msg) {
 
