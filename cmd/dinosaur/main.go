@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"log"
 	"net"
@@ -99,20 +98,7 @@ func main() {
 	}
 
 	for _, v := range localZoneFileFlag {
-		file, err := Urlopen(v)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			if err := config.Cache.AddPermanent(scanner.Text()); err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
+		if err := URLReader(v, func(line string) error { return config.Cache.AddPermanent(line) }); err != nil {
 			log.Fatal(err)
 		}
 	}

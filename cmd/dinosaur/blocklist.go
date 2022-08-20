@@ -26,7 +26,7 @@ func addBlocklistEntry(blocklist *block.BlockList, entry string, default_qtype u
 }
 
 func addBlocklistFromFile(blocklist *block.BlockList, f string, default_qtype uint16) {
-	file, err := Urlopen(f)
+	file, err := UrlOpen(f)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func addBlocklistFromFile(blocklist *block.BlockList, f string, default_qtype ui
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
-		addBlocklistEntry(blocklist, scanner.Text(), default_qtype)
+		addBlocklistEntry(blocklist, line, default_qtype)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -56,7 +56,7 @@ func splitHostsEntry(entry string) (ip, domain string, err error) {
 }
 
 func addBlocklistFromHostsFile(blocklist *block.BlockList, f string) {
-	file, err := Urlopen(f)
+	file, err := UrlOpen(f)
 	if err != nil {
 		log.Fatal(err)
 	}
