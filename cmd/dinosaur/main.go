@@ -30,6 +30,7 @@ func main() {
 
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var debugFlag = flag.Bool("debug", false, "Debug")
+	var checkUpstreamFlag = flag.Bool("check-upstream", false, "Check upstream resolvers at startup")
 
 	var listenFlag multiFlag
 	var blockFlag multiFlag
@@ -100,11 +101,13 @@ func main() {
 		}
 	}
 
-	// Check upstream resolvers
-	for _, v := range config.Upstream {
-		_, err := proxy.Resolve(v, ".", "NS")
-		if err != nil {
-			log.Fatalf("Invalid resolver: %s (%s)", v, err)
+	if *checkUpstreamFlag {
+		// Check upstream resolvers
+		for _, v := range config.Upstream {
+			_, err := proxy.Resolve(v, ".", "NS")
+			if err != nil {
+				log.Fatalf("Invalid resolver: %s (%s)", v, err)
+			}
 		}
 	}
 
