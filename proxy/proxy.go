@@ -13,6 +13,16 @@ import (
 	"github.com/paulc/dinosaur/config"
 )
 
+func Resolve(resolver string, qname string, qtype string) (*dns.Msg, error) {
+	r := new(dns.Msg)
+	r.SetQuestion(qname, dns.StringToType[qtype])
+	if strings.HasPrefix(resolver, "https://") {
+		return dohRequest(r, resolver)
+	} else {
+		return dnsRequest(r, resolver)
+	}
+}
+
 func matchDomain(domains []string, name string) bool {
 	for _, domain := range domains {
 		if dns.IsSubDomain(domain, name) {

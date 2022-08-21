@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -70,24 +71,40 @@ func main() {
 
 	// Get listen address
 	if len(listenFlag) == 0 {
-		if err := config.AddListenAddr("127.0.0.1:8053"); err != nil {
-			log.Fatal(err)
-		}
+		// default
+		config.ListenAddr = append(config.ListenAddr, "127.0.0.1:8053")
 	} else {
 		for _, v := range listenFlag {
-			if err := config.AddListenAddr(v); err != nil {
+			addrs, err := util.ParseAddr(v, 53)
+			if err != nil {
 				log.Fatal(err)
+			}
+			for _, v := range addrs {
+				config.ListenAddr = append(config.ListenAddr, v)
 			}
 		}
 	}
 
 	// Get upstream resolvers
 	if len(upstreamFlag) == 0 {
-		config.AddUpstream("1.1.1.1:53")
-		config.AddUpstream("1.0.0.1:53")
+		// Default
+		config.Upstream = append(config.Upstream, ("1.1.1.1:53"))
+		config.Upstream = append(config.Upstream, ("1.0.0.1:53"))
 	} else {
 		for _, v := range upstreamFlag {
+			// Add default port if not specified for non DoH
+			if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
+				v += ":53"
+			}
 			config.Upstream = append(config.Upstream, v)
+		}
+	}
+
+	// Check upstream resolvers
+	for _, v := range config.Upstream {
+		_, err := proxy.Resolve(v, ".", "NS")
+		if err != nil {
+			log.Fatalf("Invalid resolver: %s (%s)", v, err)
 		}
 	}
 

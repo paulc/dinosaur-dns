@@ -5,7 +5,6 @@ import (
 
 	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/cache"
-	"github.com/paulc/dinosaur/util"
 )
 
 type ProxyConfig struct {
@@ -25,19 +24,4 @@ func NewProxyConfig() *ProxyConfig {
 		Cache:      cache.NewDNSCache(),
 		BlockList:  block.NewBlockList(),
 	}
-}
-
-func (c *ProxyConfig) AddListenAddr(addr string) error {
-	addrs, err := util.ParseAddr(addr, 53)
-	if err != nil {
-		return err
-	}
-	for _, v := range addrs {
-		c.ListenAddr = append(c.ListenAddr, v)
-	}
-	return nil
-}
-
-func (c *ProxyConfig) AddUpstream(upstream string) {
-	c.Upstream = append(c.Upstream, upstream)
 }
