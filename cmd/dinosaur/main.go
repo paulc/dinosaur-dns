@@ -10,6 +10,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
+	"github.com/paulc/dinosaur/util"
 )
 
 var logDebug func(...any)
@@ -98,26 +99,54 @@ func main() {
 	}
 
 	for _, v := range localZoneFileFlag {
-		if err := URLReader(v, func(line string) error { return config.Cache.AddPermanent(line) }); err != nil {
+		if err := util.URLReader(v, func(line string) error {
+			return config.Cache.AddPermanent(line)
+		}); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// Add block entries
 	for _, v := range blockFlag {
-		addBlocklistEntry(config.BlockList, v, dns.TypeANY)
+		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	for _, v := range blocklistFlag {
-		addBlocklistFromFile(config.BlockList, v, dns.TypeANY)
+		if err := util.URLReader(v, func(line string) error {
+			line = strings.TrimSpace(line)
+			if len(line) == 0 || line[0] == '#' {
+				return nil
+			}
+			return config.BlockList.AddEntry(line, dns.TypeANY)
+		}); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	for _, v := range blocklistAAAAFlag {
-		addBlocklistFromFile(config.BlockList, v, dns.TypeAAAA)
+		if err := util.URLReader(v, func(line string) error {
+			line = strings.TrimSpace(line)
+			if len(line) == 0 || line[0] == '#' {
+				return nil
+			}
+			return config.BlockList.AddEntry(line, dns.TypeAAAA)
+		}); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	for _, v := range blocklistHostsFlag {
-		addBlocklistFromHostsFile(config.BlockList, v)
+		if err := util.URLReader(v, func(line string) error {
+			line = strings.TrimSpace(line)
+			if len(line) == 0 || line[0] == '#' {
+				return nil
+			}
+			return config.BlockList.AddHostsEntry(line)
+		}); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	for _, v := range aclFlag {

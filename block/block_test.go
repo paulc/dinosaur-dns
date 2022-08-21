@@ -24,7 +24,7 @@ func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, exp
 func TestBlockCount(t *testing.T) {
 	root := NewBlockList()
 	for _, v := range BlockDomains {
-		root.AddName(v, dns.TypeANY)
+		root.Add(v, dns.TypeANY)
 	}
 	t.Logf("root :: %+v", root)
 	if root.Count() != len(BlockDomains) {
@@ -36,7 +36,7 @@ func TestBlockCount(t *testing.T) {
 func TestBlockAny(t *testing.T) {
 	root := NewBlockList()
 	for _, v := range BlockDomains {
-		root.AddName(v, dns.TypeANY)
+		root.Add(v, dns.TypeANY)
 	}
 	t.Logf("root :: %+v", root)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
@@ -48,7 +48,7 @@ func TestBlockAny(t *testing.T) {
 func TestBlockAAAA(t *testing.T) {
 	root := NewBlockList()
 	for _, v := range BlockDomains {
-		root.AddName(v, dns.TypeAAAA)
+		root.Add(v, dns.TypeAAAA)
 	}
 	t.Logf("root :: %+v", root)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
@@ -60,7 +60,7 @@ func TestBlockAAAA(t *testing.T) {
 func TestBlockRootAAAA(t *testing.T) {
 	root := NewBlockList()
 	for _, v := range []string{"."} {
-		root.AddName(v, dns.TypeAAAA)
+		root.Add(v, dns.TypeAAAA)
 	}
 	t.Logf("root :: %+v", root)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {

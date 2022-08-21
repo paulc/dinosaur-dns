@@ -5,6 +5,7 @@ import (
 
 	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/cache"
+	"github.com/paulc/dinosaur/util"
 )
 
 type ProxyConfig struct {
@@ -27,7 +28,7 @@ func NewProxyConfig() *ProxyConfig {
 }
 
 func (c *ProxyConfig) AddListenAddr(addr string) error {
-	addrs, err := parseAddr(addr, 53)
+	addrs, err := util.ParseAddr(addr, 53)
 	if err != nil {
 		return err
 	}

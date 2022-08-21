@@ -1,4 +1,4 @@
-package config
+package util
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// We accept addresses as either:
+// Accept addresses as either:
 //
 //    ip:port
 //    [ip6]:port
@@ -15,8 +15,10 @@ import (
 //    ip6		    	(default port)
 //    interface:port	(all addresses on interface)
 //    interface			(all addresses on interface - default port)
+//
+// Returns list of ip:port addrs suitable for net.Listen
 
-func parseAddr(addr string, defaultPort int) (addrs []string, err error) {
+func ParseAddr(addr string, defaultPort int) (addrs []string, err error) {
 
 	portRE := regexp.MustCompile(`:\d+$`)
 
