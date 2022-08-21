@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
 	"github.com/paulc/dinosaur/util"
@@ -119,9 +120,7 @@ func main() {
 	}
 
 	for _, v := range localZoneFileFlag {
-		if err := util.URLReader(v, func(line string) error {
-			return config.Cache.AddPermanent(line)
-		}); err != nil {
+		if err := util.URLReader(v, func(line string) error { return config.Cache.AddPermanent(line) }); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -134,37 +133,19 @@ func main() {
 	}
 
 	for _, v := range blocklistFlag {
-		if err := util.URLReader(v, func(line string) error {
-			line = strings.TrimSpace(line)
-			if len(line) == 0 || line[0] == '#' {
-				return nil
-			}
-			return config.BlockList.AddEntry(line, dns.TypeANY)
-		}); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistAAAAFlag {
-		if err := util.URLReader(v, func(line string) error {
-			line = strings.TrimSpace(line)
-			if len(line) == 0 || line[0] == '#' {
-				return nil
-			}
-			return config.BlockList.AddEntry(line, dns.TypeAAAA)
-		}); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistHostsFlag {
-		if err := util.URLReader(v, func(line string) error {
-			line = strings.TrimSpace(line)
-			if len(line) == 0 || line[0] == '#' {
-				return nil
-			}
-			return config.BlockList.AddHostsEntry(line)
-		}); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
 			log.Fatal(err)
 		}
 	}

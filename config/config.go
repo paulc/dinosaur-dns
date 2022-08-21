@@ -25,3 +25,16 @@ func NewProxyConfig() *ProxyConfig {
 		BlockList:  block.NewBlockList(),
 	}
 }
+
+type JSONProxyConfig struct {
+	Listen             []string
+	Upstream           []string
+	CheckUpstream      bool `json:"check-upstream"`
+	Acl                []string
+	Block              []string
+	Blocklist          []string
+	BlocklistAAAA      []string `json:"blocklist-aaaa"`
+	BLocklistFromHosts []string `json:"blocklist-from-hosts"`
+	Local              []string
+	Localzone          []string
+}

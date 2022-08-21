@@ -107,3 +107,24 @@ func (t *BlockList) Count() (total int) {
 	total += len(t.Leaves)
 	return
 }
+
+// Utility functions to generate reader functions for util.URLReader
+func MakeBlockListReaderf(b *BlockList, default_qtype uint16) func(line string) error {
+	return func(line string) error {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 || line[0] == '#' {
+			return nil
+		}
+		return b.AddEntry(line, default_qtype)
+	}
+}
+
+func MakeBlockListHostsReaderf(b *BlockList) func(line string) error {
+	return func(line string) error {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 || line[0] == '#' {
+			return nil
+		}
+		return b.AddHostsEntry(line)
+	}
+}
