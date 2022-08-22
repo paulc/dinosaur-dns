@@ -23,7 +23,7 @@ func CheckUpstream(upstream []string) error {
 	for _, v := range upstream {
 		_, err := proxy.Resolve(v, ".", "NS")
 		if err != nil {
-			fmt.Errorf("Invalid resolver: %s (%s)", v, err)
+			return fmt.Errorf("Invalid resolver: %s (%s)", v, err)
 		}
 	}
 	return nil
