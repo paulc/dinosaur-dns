@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/miekg/dns"
@@ -122,6 +123,8 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			return
 		}
 
+		// ParseIP doesnt handle IPv6 link local addresses correctly (...%ifname) so we strip interface
+		clientHost = regexp.MustCompile(`%.+$`).ReplaceAllString(clientHost, "")
 		clientIP := net.ParseIP(clientHost)
 
 		if !checkACL(config.ACL, clientIP) {

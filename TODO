@@ -1,6 +1,8 @@
 
 [x] More flexible listen address (default :53 / v4/v6 only default address)
-[ ] JSON config
+[X] JSON config
+[ ] Link-local ACLs
+[ ] Improve error propogation
 [ ] More flexible logging
 [ ] DNS64
 [ ] Lock blocklist updates
