@@ -124,18 +124,17 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		}
 
 		// ParseIP doesnt handle IPv6 link local addresses correctly (...%ifname) so we strip interface
-		clientHost = regexp.MustCompile(`%.+$`).ReplaceAllString(clientHost, "")
-		clientIP := net.ParseIP(clientHost)
+		clientIP := net.ParseIP(regexp.MustCompile(`%.+$`).ReplaceAllString(clientHost, ""))
 
 		if !checkACL(config.ACL, clientIP) {
-			log.Printf("Connection: %s [refused]", clientIP)
+			log.Printf("Connection: %s [refused]", clientHost)
 			// Close connection
 			w.Close()
 			return
 		}
 
 		if len(r.Question) != 1 {
-			log.Printf("Connection: %s [invalid question]", clientIP)
+			log.Printf("Connection: %s [invalid question]", clientHost)
 			w.Close()
 			return
 		}
@@ -146,7 +145,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// Check blocklist
 		if config.BlockList.MatchQ(name, qtype) {
-			log.Printf("Connection: %s <%s %s> [blocked]", clientIP, name, dns.TypeToString[qtype])
+			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, name, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
 			w.Close()
 			return
@@ -155,7 +154,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// Check Cache
 		cached, found := config.Cache.Get(r)
 		if found {
-			log.Printf("Connection: %s <%s %s> [cached]", clientIP, name, dns.TypeToString[qtype])
+			log.Printf("Connection: %s <%s %s> [cached]", clientHost, name, dns.TypeToString[qtype])
 			w.WriteMsg(cached)
 			return
 		}
@@ -179,7 +178,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 				if i == 0 {
 					config.UpstreamErr = 0
 				}
-				log.Printf("Connection: %s <%s %s> [ok]", clientIP, name, dns.TypeToString[qtype])
+				log.Printf("Connection: %s <%s %s> [ok]", clientHost, name, dns.TypeToString[qtype])
 				return
 			}
 
@@ -198,7 +197,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			log.Print(err)
 
 		}
-		log.Printf("Connection: %s <%s %s> [upstream error]", clientIP, name, dns.TypeToString[qtype])
+		log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, name, dns.TypeToString[qtype])
 		w.WriteMsg(dnsErrorResponse(r, dns.RcodeServerFailure, errors.New("Upstream error")))
 	}
 }
