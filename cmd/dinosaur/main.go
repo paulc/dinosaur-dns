@@ -16,8 +16,8 @@ import (
 	"github.com/paulc/dinosaur/util"
 )
 
-var logDebug func(...any)
-var logDebugf func(string, ...any)
+var logDebug func(...interface{})
+var logDebugf func(string, ...interface{})
 
 func CheckUpstream(upstream []string) error {
 	for _, v := range upstream {
@@ -76,8 +76,8 @@ func main() {
 		logDebug = log.Print
 		logDebugf = log.Printf
 	} else {
-		logDebug = func(v ...any) {}
-		logDebugf = func(f string, v ...any) {}
+		logDebug = func(v ...interface{}) {}
+		logDebugf = func(f string, v ...interface{}) {}
 	}
 
 	// Initialise config
