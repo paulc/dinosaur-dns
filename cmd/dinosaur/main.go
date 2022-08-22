@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"regexp"
@@ -18,6 +19,16 @@ import (
 var logDebug func(...any)
 var logDebugf func(string, ...any)
 
+func CheckUpstream(upstream []string) error {
+	for _, v := range upstream {
+		_, err := proxy.Resolve(v, ".", "NS")
+		if err != nil {
+			fmt.Errorf("Invalid resolver: %s (%s)", v, err)
+		}
+	}
+	return nil
+}
+
 func ACLToString(acl []net.IPNet) (out []string) {
 	for _, v := range acl {
 		out = append(out, v.String())
@@ -31,7 +42,8 @@ func main() {
 
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var debugFlag = flag.Bool("debug", false, "Debug")
-	var checkUpstreamFlag = flag.Bool("check-upstream", false, "Check upstream resolvers at startup")
+	// var checkUpstreamFlag = flag.Bool("check-upstream", false, "Check upstream resolvers at startup")
+	var configFlag = flag.String("config", "", "JSON config file")
 
 	var listenFlag multiFlag
 	var blockFlag multiFlag
@@ -71,45 +83,36 @@ func main() {
 	// Initialise config
 	config := config.NewProxyConfig()
 
+	// Get JSON config first
+	if len(*configFlag) != 0 {
+		r, err := util.UrlOpen(*configFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer r.Close()
+		if err := config.LoadJSON(r); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	// Get listen address
-	if len(listenFlag) == 0 {
-		// default
-		config.ListenAddr = append(config.ListenAddr, "127.0.0.1:8053")
-	} else {
-		for _, v := range listenFlag {
-			addrs, err := util.ParseAddr(v, 53)
-			if err != nil {
-				log.Fatal(err)
-			}
-			for _, v := range addrs {
-				config.ListenAddr = append(config.ListenAddr, v)
-			}
+	for _, v := range listenFlag {
+		addrs, err := util.ParseAddr(v, 53)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, v := range addrs {
+			config.ListenAddr = append(config.ListenAddr, v)
 		}
 	}
 
 	// Get upstream resolvers
-	if len(upstreamFlag) == 0 {
-		// Default
-		config.Upstream = append(config.Upstream, ("1.1.1.1:53"))
-		config.Upstream = append(config.Upstream, ("1.0.0.1:53"))
-	} else {
-		for _, v := range upstreamFlag {
-			// Add default port if not specified for non DoH
-			if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
-				v += ":53"
-			}
-			config.Upstream = append(config.Upstream, v)
+	for _, v := range upstreamFlag {
+		// Add default port if not specified for non DoH
+		if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
+			v += ":53"
 		}
-	}
-
-	if *checkUpstreamFlag {
-		// Check upstream resolvers
-		for _, v := range config.Upstream {
-			_, err := proxy.Resolve(v, ".", "NS")
-			if err != nil {
-				log.Fatalf("Invalid resolver: %s (%s)", v, err)
-			}
-		}
+		config.Upstream = append(config.Upstream, v)
 	}
 
 	// Add local cache entries
@@ -125,7 +128,7 @@ func main() {
 		}
 	}
 
-	// Add block entries
+	// Get blocklist entries
 	for _, v := range blockFlag {
 		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			log.Fatal(err)
@@ -150,12 +153,23 @@ func main() {
 		}
 	}
 
+	// Get ACL
 	for _, v := range aclFlag {
 		_, cidr, err := net.ParseCIDR(v)
 		if err != nil {
 			log.Fatalf("ACL Error (%s): %s", v, err)
 		}
 		config.ACL = append(config.ACL, *cidr)
+	}
+
+	// Set defaults if necessary
+
+	if len(config.ListenAddr) == 0 {
+		config.ListenAddr = []string{"127.0.0.1:8053"}
+	}
+
+	if len(config.Upstream) == 0 {
+		config.Upstream = []string{"1.1.1.1:53", "1.0.0.1:53"}
 	}
 
 	// Start listeners
