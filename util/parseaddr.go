@@ -41,12 +41,12 @@ func ParseAddr(addr string, defaultPort int) (addrs []string, err error) {
 	// Get addresses
 	ifaddrs, err := netif.Addrs()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error getting interface addresses: %s", err)
 	}
 	for _, v := range ifaddrs {
 		ip, _, err := net.ParseCIDR(v.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error parsing addresse <%s>: %s", v.String(), err)
 		}
 		if ip.IsLinkLocalUnicast() {
 			addrs = append(addrs, net.JoinHostPort(ip.String()+"%"+netif.Name, port))

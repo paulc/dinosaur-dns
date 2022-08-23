@@ -19,7 +19,7 @@ func createCacheItem(qname string, qtype string, answer string) (msg *dns.Msg, e
 
 	rr, err := dns.NewRR(answer)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error creating RR: %s", err)
 	}
 
 	msg = new(dns.Msg)

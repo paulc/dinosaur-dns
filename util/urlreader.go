@@ -13,7 +13,7 @@ import (
 func UrlOpen(arg string) (io.ReadCloser, error) {
 	target, err := url.Parse(arg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Couldnt parse URL <%s> %s", arg, err)
 	}
 
 	if target.Scheme == "" {
@@ -21,13 +21,13 @@ func UrlOpen(arg string) (io.ReadCloser, error) {
 	} else if target.Scheme == "http" || target.Scheme == "https" {
 		resp, err := http.Get(arg)
 		if err != nil {
-			return nil, fmt.Errorf("urlGet Error: %s", err)
+			return nil, fmt.Errorf("Error fetching URL <%s>: %s", arg, err)
 		}
 		return resp.Body, nil
 	} else if target.Scheme == "file" {
 		return os.Open(target.Path)
 	} else {
-		return nil, fmt.Errorf("Error: Invalid URL scheme: %s (http/https/file supported)", arg)
+		return nil, fmt.Errorf("Invalid URL scheme: %s (http/https/file supported)", arg)
 	}
 }
 
@@ -36,11 +36,11 @@ func LineReader(r io.Reader, f func(s string) error) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		if err := f(scanner.Text()); err != nil {
-			return err
+			return fmt.Errorf("Error calling line function: %s", err)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return err
+		return fmt.Errorf("Scanner Error: %s", err)
 	}
 	return nil
 }
