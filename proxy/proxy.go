@@ -37,7 +37,7 @@ func dnsRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
 	c := new(dns.Client)
 	out, _, err := c.Exchange(r, resolver)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("DNS Query Error: %s", err)
 	}
 	return out, nil
 }
@@ -48,12 +48,12 @@ func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
 
 	pack, err := r.Pack()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error packing record: %s", err)
 	}
 
 	request, err := http.NewRequest("POST", resolver, bytes.NewReader(pack))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error creating HTTP request: %s", err)
 	}
 
 	request.Header.Set("Accept", "application/dns-message")
@@ -61,22 +61,22 @@ func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
 
 	resp, err := c.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request error: %s", err)
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status)
+		return nil, fmt.Errorf("HTTP request failed - status: %s", resp.Status)
 	}
 
 	buffer := bytes.Buffer{}
 	_, err = buffer.ReadFrom(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error reading HTTP body: %s", err)
 	}
 
 	out := new(dns.Msg)
 	if out.Unpack(buffer.Bytes()) != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error parsing DNS response: %s", err)
 	}
 
 	return out, nil
@@ -144,7 +144,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		qtype := r.Question[0].Qtype
 
 		// Check blocklist
-		if config.BlockList.MatchQ(name, qtype) {
+		if config.BlockListRoot.Root.MatchQ(name, qtype) {
 			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, name, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
 			w.Close()

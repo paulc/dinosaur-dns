@@ -130,25 +130,25 @@ func main() {
 
 	// Get blocklist entries
 	for _, v := range blockFlag {
-		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
+		if err := config.BlockListRoot.Root.AddEntry(v, dns.TypeANY); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistFlag {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockListRoot.Root, dns.TypeANY)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistAAAAFlag {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockListRoot.Root, dns.TypeAAAA)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistHostsFlag {
-		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockListRoot.Root)); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -225,7 +225,7 @@ func main() {
 	// logDebugf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
-	log.Printf("Blocklist: %d entries", config.BlockList.Count())
+	log.Printf("Blocklist: %d entries", config.BlockListRoot.Root.Count())
 	log.Printf("ACL: %s", strings.Join(ACLToString(config.ACL), " "))
 
 	// Wait

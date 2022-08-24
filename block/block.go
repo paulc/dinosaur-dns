@@ -13,9 +13,17 @@ import (
 // (split leaves from children)
 
 type BlockList struct {
-	sync.RWMutex
 	Leaves   map[string]uint16
 	Children map[string]*BlockList
+}
+
+type BlockListRoot struct {
+	sync.RWMutex
+	Root *BlockList
+}
+
+func NewBlockListRoot() *BlockListRoot {
+	return &BlockListRoot{Root: NewBlockList()}
 }
 
 func NewBlockList() *BlockList {

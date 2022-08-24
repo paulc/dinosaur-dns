@@ -52,7 +52,7 @@ func NewDNSCache() *DNSCache {
 func (c *DNSCache) AddPermanent(entry string) error {
 	rr, err := dns.NewRR(entry)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error creating RR: %s", err)
 	}
 
 	if rr == nil {

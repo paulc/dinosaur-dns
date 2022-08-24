@@ -15,21 +15,21 @@ import (
 )
 
 type ProxyConfig struct {
-	ListenAddr  []string
-	Upstream    []string
-	UpstreamErr int
-	Cache       *cache.DNSCache
-	BlockList   *block.BlockList
-	ACL         []net.IPNet
+	ListenAddr    []string
+	Upstream      []string
+	UpstreamErr   int
+	Cache         *cache.DNSCache
+	BlockListRoot *block.BlockListRoot
+	ACL           []net.IPNet
 }
 
 func NewProxyConfig() *ProxyConfig {
 	return &ProxyConfig{
-		ListenAddr: make([]string, 0),
-		Upstream:   make([]string, 0),
-		ACL:        make([]net.IPNet, 0),
-		Cache:      cache.NewDNSCache(),
-		BlockList:  block.NewBlockList(),
+		ListenAddr:    make([]string, 0),
+		Upstream:      make([]string, 0),
+		ACL:           make([]net.IPNet, 0),
+		Cache:         cache.NewDNSCache(),
+		BlockListRoot: block.NewBlockListRoot(),
 	}
 }
 
@@ -96,25 +96,25 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 	}
 
 	for _, v := range json_config.Block {
-		if err := c.BlockList.AddEntry(v, dns.TypeANY); err != nil {
+		if err := c.BlockListRoot.Root.AddEntry(v, dns.TypeANY); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.Blocklist {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeANY)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockListRoot.Root, dns.TypeANY)); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.BlocklistAAAA {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeAAAA)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockListRoot.Root, dns.TypeAAAA)); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.BlocklistFromHosts {
-		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(c.BlockList)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(c.BlockListRoot.Root)); err != nil {
 			return err
 		}
 	}
