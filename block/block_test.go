@@ -22,48 +22,48 @@ func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, exp
 }
 
 func TestBlockCount(t *testing.T) {
-	root := NewBlockList()
+	bl := NewBlockList()
 	for _, v := range BlockDomains {
-		root.Add(v, dns.TypeANY)
+		bl.Add(v, dns.TypeANY)
 	}
-	t.Logf("root :: %+v", root)
-	if root.Count() != len(BlockDomains) {
-		t.Errorf("root.Count() = %d (expected %d)", root.Count(), len(BlockDomains))
+	t.Logf("root :: %+v", bl)
+	if bl.Count() != len(BlockDomains) {
+		t.Errorf("root.Count() = %d (expected %d)", bl.Count(), len(BlockDomains))
 	}
-	t.Logf("root :: count = %d", root.Count())
+	t.Logf("root :: count = %d", bl.Count())
 }
 
 func TestBlockAny(t *testing.T) {
-	root := NewBlockList()
+	bl := NewBlockList()
 	for _, v := range BlockDomains {
-		root.Add(v, dns.TypeANY)
+		bl.Add(v, dns.TypeANY)
 	}
-	t.Logf("root :: %+v", root)
+	t.Logf("bl :: %+v", bl)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
-		test_match(t, root, CheckDomainsTrue, qtype, true)
-		test_match(t, root, CheckDomainsFalse, qtype, false)
+		test_match(t, bl, CheckDomainsTrue, qtype, true)
+		test_match(t, bl, CheckDomainsFalse, qtype, false)
 	}
 }
 
 func TestBlockAAAA(t *testing.T) {
-	root := NewBlockList()
+	bl := NewBlockList()
 	for _, v := range BlockDomains {
-		root.Add(v, dns.TypeAAAA)
+		bl.Add(v, dns.TypeAAAA)
 	}
-	t.Logf("root :: %+v", root)
+	t.Logf("bl :: %+v", bl)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
-		test_match(t, root, CheckDomainsTrue, qtype, qtype == dns.TypeAAAA)
-		test_match(t, root, CheckDomainsFalse, qtype, false)
+		test_match(t, bl, CheckDomainsTrue, qtype, qtype == dns.TypeAAAA)
+		test_match(t, bl, CheckDomainsFalse, qtype, false)
 	}
 }
 
 func TestBlockRootAAAA(t *testing.T) {
-	root := NewBlockList()
+	bl := NewBlockList()
 	for _, v := range []string{"."} {
-		root.Add(v, dns.TypeAAAA)
+		bl.Add(v, dns.TypeAAAA)
 	}
-	t.Logf("root :: %+v", root)
+	t.Logf("bl :: %+v", bl)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
-		test_match(t, root, []string{"abc.com", "xxx.yyy"}, qtype, qtype == dns.TypeAAAA)
+		test_match(t, bl, []string{"abc.com", "xxx.yyy"}, qtype, qtype == dns.TypeAAAA)
 	}
 }
