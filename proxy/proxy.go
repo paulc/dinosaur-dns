@@ -144,7 +144,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		qtype := r.Question[0].Qtype
 
 		// Check blocklist
-		if config.BlockListRoot.Root.MatchQ(name, qtype) {
+		if config.BlockList.MatchQ(name, qtype) {
 			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, name, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
 			w.Close()

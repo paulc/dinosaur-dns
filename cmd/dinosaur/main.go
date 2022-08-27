@@ -47,6 +47,7 @@ func main() {
 
 	var listenFlag multiFlag
 	var blockFlag multiFlag
+	var blockDeleteFlag multiFlag
 	var blocklistFlag multiFlag
 	var blocklistAAAAFlag multiFlag
 	var blocklistHostsFlag multiFlag
@@ -58,6 +59,7 @@ func main() {
 	flag.Var(&listenFlag, "listen", "Listen address (default: 127.0.0.1:8053)")
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
 	flag.Var(&blockFlag, "block", "Block entry (format: 'domain[:qtype]')")
+	flag.Var(&blockDeleteFlag, "block-delete", "Delete block entry (format: 'domain[:qtype]')")
 	flag.Var(&blocklistFlag, "blocklist", "Blocklist file")
 	flag.Var(&blocklistAAAAFlag, "blocklist-aaaa", "Blocklist file (AAAA)")
 	flag.Var(&blocklistHostsFlag, "blocklist-from-hosts", "Blocklist from /etc/hosts format file")
@@ -130,27 +132,33 @@ func main() {
 
 	// Get blocklist entries
 	for _, v := range blockFlag {
-		if err := config.BlockListRoot.Root.AddEntry(v, dns.TypeANY); err != nil {
+		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistFlag {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockListRoot.Root, dns.TypeANY)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistAAAAFlag {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockListRoot.Root, dns.TypeAAAA)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range blocklistHostsFlag {
-		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockListRoot.Root)); err != nil {
+		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	// Delete entries last (allows us to delete specific entries from blocklist/BlocklistHosts
+	for _, v := range blockDeleteFlag {
+		n := config.BlockList.Delete(v)
+		log.Printf("BlockList Delete: %s (%d records)", v, n)
 	}
 
 	// Get ACL
@@ -225,7 +233,7 @@ func main() {
 	// logDebugf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
-	log.Printf("Blocklist: %d entries", config.BlockListRoot.Root.Count())
+	log.Printf("Blocklist: %d entries", config.BlockList.Count())
 	log.Printf("ACL: %s", strings.Join(ACLToString(config.ACL), " "))
 
 	// Wait

@@ -26,9 +26,38 @@ func TestBlockCount(t *testing.T) {
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
-	t.Logf("root :: %+v", bl)
 	if bl.Count() != len(BlockDomains) {
 		t.Errorf("root.Count() = %d (expected %d)", bl.Count(), len(BlockDomains))
+	}
+	t.Logf("root :: count = %d", bl.Count())
+}
+
+func TestBlockDelete(t *testing.T) {
+	bl := NewBlockList()
+	for _, v := range BlockDomains {
+		bl.Add(v, dns.TypeANY)
+	}
+	if bl.Delete(BlockDomains[0]) != 1 {
+		t.Errorf("t.Delete(%s) error", BlockDomains[0])
+	}
+	if bl.Delete("nonexistent.block.com") != 0 {
+		t.Errorf("t.Delete(%s) error", "nonexistent.block.com")
+	}
+	if bl.Count() != len(BlockDomains)-1 {
+		t.Errorf("root.Count() = %d (expected %d)", bl.Count(), len(BlockDomains)-1)
+	}
+	t.Logf("root :: count = %d", bl.Count())
+	test_match(t, bl, BlockDomains[:1], dns.TypeA, false)
+	test_match(t, bl, BlockDomains[1:], dns.TypeA, true)
+}
+
+func TestBlockDeleteTree(t *testing.T) {
+	bl := NewBlockList()
+	for _, v := range BlockDomains {
+		bl.Add(v, dns.TypeANY)
+	}
+	if bl.Delete("block.com") != len(BlockDomains) {
+		t.Errorf("t.Delete(%s) error", "block.com")
 	}
 	t.Logf("root :: count = %d", bl.Count())
 }
@@ -38,7 +67,6 @@ func TestBlockAny(t *testing.T) {
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
-	t.Logf("bl :: %+v", bl)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
 		test_match(t, bl, CheckDomainsTrue, qtype, true)
 		test_match(t, bl, CheckDomainsFalse, qtype, false)
@@ -50,7 +78,6 @@ func TestBlockAAAA(t *testing.T) {
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeAAAA)
 	}
-	t.Logf("bl :: %+v", bl)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
 		test_match(t, bl, CheckDomainsTrue, qtype, qtype == dns.TypeAAAA)
 		test_match(t, bl, CheckDomainsFalse, qtype, false)
@@ -62,7 +89,6 @@ func TestBlockRootAAAA(t *testing.T) {
 	for _, v := range []string{"."} {
 		bl.Add(v, dns.TypeAAAA)
 	}
-	t.Logf("bl :: %+v", bl)
 	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeTXT} {
 		test_match(t, bl, []string{"abc.com", "xxx.yyy"}, qtype, qtype == dns.TypeAAAA)
 	}
