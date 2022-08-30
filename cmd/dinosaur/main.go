@@ -36,6 +36,16 @@ func ACLToString(acl []net.IPNet) (out []string) {
 	return
 }
 
+func isV4Global(hostport string) bool {
+	host, _, _ := net.SplitHostPort(hostport)
+	return host == "0.0.0.0" || host == "0"
+}
+
+func isV6Global(hostport string) bool {
+	host, _, _ := net.SplitHostPort(hostport)
+	return host == "::" || host == "::0"
+}
+
 func main() {
 
 	// Command line flags
