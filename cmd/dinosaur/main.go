@@ -52,19 +52,20 @@ func main() {
 
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var debugFlag = flag.Bool("debug", false, "Debug")
-	// var checkUpstreamFlag = flag.Bool("check-upstream", false, "Check upstream resolvers at startup")
 	var configFlag = flag.String("config", "", "JSON config file")
+	var nat64Flag = flag.Bool("nat64", false, "Enable NAT64 (for queries from IPv6 addresses)")
+	var nat64PrefixFlag = flag.String("nat64-prefix", "", "NAT64 prefix (default: 64:ff9b::/96)")
 
-	var listenFlag multiFlag
-	var blockFlag multiFlag
-	var blockDeleteFlag multiFlag
-	var blocklistFlag multiFlag
-	var blocklistAAAAFlag multiFlag
-	var blocklistHostsFlag multiFlag
-	var upstreamFlag multiFlag
-	var localZoneFlag multiFlag
-	var localZoneFileFlag multiFlag
-	var aclFlag multiFlag
+	var listenFlag util.MultiFlag
+	var blockFlag util.MultiFlag
+	var blockDeleteFlag util.MultiFlag
+	var blocklistFlag util.MultiFlag
+	var blocklistAAAAFlag util.MultiFlag
+	var blocklistHostsFlag util.MultiFlag
+	var upstreamFlag util.MultiFlag
+	var localZoneFlag util.MultiFlag
+	var localZoneFileFlag util.MultiFlag
+	var aclFlag util.MultiFlag
 
 	flag.Var(&listenFlag, "listen", "Listen address (default: 127.0.0.1:8053)")
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
@@ -140,25 +141,29 @@ func main() {
 		}
 	}
 
-	// Get blocklist entries
+	// Get individual blocklist entries
 	for _, v := range blockFlag {
 		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			log.Fatal(err)
 		}
 	}
 
+	// Get blocklist from file/url entries
 	for _, v := range blocklistFlag {
 		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
+	// Get AAAA blocklist from file/url entries (convenience function - mostly so that you can
+	// use Netflix CDN list from https://openconnect.netflix.com/mobiledeliverydomains.txt)
 	for _, v := range blocklistAAAAFlag {
 		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
+	// Get blocklist from file/url entries
 	for _, v := range blocklistHostsFlag {
 		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
 			log.Fatal(err)
@@ -178,6 +183,22 @@ func main() {
 			log.Fatalf("ACL Error (%s): %s", v, err)
 		}
 		config.ACL = append(config.ACL, *cidr)
+	}
+
+	// NAT64
+	if *nat64Flag {
+		config.Dns64 = true
+		if *nat64PrefixFlag != "" {
+			_, ipv6Net, err := net.ParseCIDR(*nat64PrefixFlag)
+			if err != nil {
+				log.Fatalf("Dns64 Prefix Error (%s): %s", *nat64PrefixFlag, err)
+			}
+			ones, bits := ipv6Net.Mask.Size()
+			if ones != 96 || bits != 128 {
+				log.Fatalf("Dns64 Prefix Error (%s): Invalid prefix", *nat64PrefixFlag)
+			}
+			config.Dns64Prefix = *ipv6Net
+		}
 	}
 
 	// Set defaults if necessary
@@ -240,7 +261,7 @@ func main() {
 		}
 	}()
 
-	// logDebugf("Config: %+v", config)
+	log.Printf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
 	log.Printf("Blocklist: %d entries", config.BlockList.Count())
