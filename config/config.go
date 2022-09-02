@@ -48,7 +48,7 @@ type JSONProxyConfig struct {
 	Local              []string
 	Localzone          []string
 	Dns64              bool
-	Dns64Prefix        string `json:"nat64-prefix"`
+	Dns64Prefix        string `json:"dns64-prefix"`
 }
 
 func (c *ProxyConfig) LoadJSON(r io.Reader) error {

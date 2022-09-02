@@ -53,8 +53,8 @@ func main() {
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var debugFlag = flag.Bool("debug", false, "Debug")
 	var configFlag = flag.String("config", "", "JSON config file")
-	var nat64Flag = flag.Bool("nat64", false, "Enable NAT64 (for queries from IPv6 addresses)")
-	var nat64PrefixFlag = flag.String("nat64-prefix", "", "NAT64 prefix (default: 64:ff9b::/96)")
+	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
+	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
 
 	var listenFlag util.MultiFlag
 	var blockFlag util.MultiFlag
@@ -185,17 +185,17 @@ func main() {
 		config.ACL = append(config.ACL, *cidr)
 	}
 
-	// NAT64
-	if *nat64Flag {
+	// DNS64
+	if *dns64Flag {
 		config.Dns64 = true
-		if *nat64PrefixFlag != "" {
-			_, ipv6Net, err := net.ParseCIDR(*nat64PrefixFlag)
+		if *dns64PrefixFlag != "" {
+			_, ipv6Net, err := net.ParseCIDR(*dns64PrefixFlag)
 			if err != nil {
-				log.Fatalf("Dns64 Prefix Error (%s): %s", *nat64PrefixFlag, err)
+				log.Fatalf("Dns64 Prefix Error (%s): %s", *dns64PrefixFlag, err)
 			}
 			ones, bits := ipv6Net.Mask.Size()
 			if ones != 96 || bits != 128 {
-				log.Fatalf("Dns64 Prefix Error (%s): Invalid prefix", *nat64PrefixFlag)
+				log.Fatalf("Dns64 Prefix Error (%s): Invalid prefix", *dns64PrefixFlag)
 			}
 			config.Dns64Prefix = *ipv6Net
 		}
