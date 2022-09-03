@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"regexp"
@@ -18,16 +17,6 @@ import (
 
 var logDebug func(...interface{})
 var logDebugf func(string, ...interface{})
-
-func CheckUpstream(upstream []string) error {
-	for _, v := range upstream {
-		_, err := proxy.Resolve(v, ".", "NS")
-		if err != nil {
-			return fmt.Errorf("Invalid resolver: %s (%s)", v, err)
-		}
-	}
-	return nil
-}
 
 func ACLToString(acl []net.IPNet) (out []string) {
 	for _, v := range acl {
@@ -204,7 +193,11 @@ func main() {
 	// Set defaults if necessary
 
 	if len(config.ListenAddr) == 0 {
-		config.ListenAddr = []string{"127.0.0.1:8053"}
+		addrs, err := util.ParseAddr("lo0", 8053)
+		if err != nil {
+			log.Fatalf("No valid listen addrs: %s", err)
+		}
+		config.ListenAddr = addrs
 	}
 
 	if len(config.Upstream) == 0 {

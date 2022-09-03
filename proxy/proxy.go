@@ -14,16 +14,6 @@ import (
 	"github.com/paulc/dinosaur/config"
 )
 
-func Resolve(resolver string, qname string, qtype string) (*dns.Msg, error) {
-	r := new(dns.Msg)
-	r.SetQuestion(qname, dns.StringToType[qtype])
-	if strings.HasPrefix(resolver, "https://") {
-		return dohRequest(r, resolver)
-	} else {
-		return dnsRequest(r, resolver)
-	}
-}
-
 func matchDomain(domains []string, name string) bool {
 	for _, domain := range domains {
 		if dns.IsSubDomain(domain, name) {
@@ -110,16 +100,69 @@ func checkACL(acl []net.IPNet, client net.IP) bool {
 
 }
 
+func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dns.Msg, err error) {
+
+	qname := dns.CanonicalName(q.Question[0].Name)
+	qtype := q.Question[0].Qtype
+
+	// Check cache
+	out, found := config.Cache.Get(q)
+	if found {
+		log.Printf("Connection: %s <%s %s> [cached]", clientHost, qname, dns.TypeToString[qtype])
+		return
+	}
+
+	// Try each resolver
+	for i, resolver := range config.Upstream {
+
+		if strings.HasPrefix(resolver, "https://") {
+			out, err = dohRequest(q, resolver)
+		} else {
+			out, err = dnsRequest(q, resolver)
+		}
+
+		if err == nil {
+			// Cache response
+			config.Cache.Add(out)
+			// If this is the first upstream clear the error count
+			if i == 0 {
+				config.UpstreamErr = 0
+			}
+			log.Printf("Connection: %s <%s %s> [ok]", clientHost, qname, dns.TypeToString[qtype])
+			// Return
+			return
+		}
+
+		// Upstream error - if this is the first upstream we count errors and try to switch if threshold exceeded
+		if i == 0 {
+			config.UpstreamErr += 1
+			if config.UpstreamErr > 3 {
+				// Demote upstream
+				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
+				log.Printf("Threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
+			}
+
+		}
+		log.Printf("Upstream error <%s>: %s", resolver, err)
+	}
+
+	// None of the resolvers worked
+	err = fmt.Errorf("Unable to resolve host - all upstream resolvers failed")
+	return
+}
+
 func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) {
 
-	return func(w dns.ResponseWriter, r *dns.Msg) {
+	return func(w dns.ResponseWriter, q *dns.Msg) {
+
+		// Always close connection
+		defer w.Close()
 
 		clientAddr := w.RemoteAddr().String()
 		clientHost, _, err := net.SplitHostPort(clientAddr)
 
 		if err != nil {
 			log.Printf("Connection: %s [client address error]", clientHost)
-			w.Close()
 			return
 		}
 
@@ -128,76 +171,80 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		if !checkACL(config.ACL, clientIP) {
 			log.Printf("Connection: %s [refused]", clientHost)
-			// Close connection
-			w.Close()
 			return
 		}
 
-		if len(r.Question) != 1 {
+		if len(q.Question) != 1 {
 			log.Printf("Connection: %s [invalid question]", clientHost)
-			w.Close()
 			return
 		}
 
-		// Get Qname
-		name := dns.CanonicalName(r.Question[0].Name)
-		qtype := r.Question[0].Qtype
+		// Get qname
+		qname := dns.CanonicalName(q.Question[0].Name)
+		qtype := q.Question[0].Qtype
 
 		// Check blocklist
-		if config.BlockList.MatchQ(name, qtype) {
-			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, name, dns.TypeToString[qtype])
-			w.WriteMsg(dnsErrorResponse(r, dns.RcodeNameError, errors.New("Blocked")))
-			w.Close()
+		if config.BlockList.MatchQ(qname, qtype) {
+			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, qname, dns.TypeToString[qtype])
+			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
 			return
 		}
 
-		// Check Cache
-		cached, found := config.Cache.Get(r)
-		if found {
-			log.Printf("Connection: %s <%s %s> [cached]", clientHost, name, dns.TypeToString[qtype])
-			w.WriteMsg(cached)
+		// Resolve address
+		out, err := resolve(config, clientHost, q)
+		if err != nil {
+			log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
+			w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 			return
 		}
 
-		for i, resolver := range config.Upstream {
-
-			var out *dns.Msg
-			var err error
-
-			if strings.HasPrefix(resolver, "https://") {
-				out, err = dohRequest(r, resolver)
-			} else {
-				out, err = dnsRequest(r, resolver)
-			}
-
-			if err == nil {
-				w.WriteMsg(out)
-				// Cache response
-				config.Cache.Add(out)
-				// If this is the first upstream clear the error count
-				if i == 0 {
-					config.UpstreamErr = 0
-				}
-				log.Printf("Connection: %s <%s %s> [ok]", clientHost, name, dns.TypeToString[qtype])
+		// DNS64
+		// XXX Check IPv6 connection ??
+		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 {
+			// Try DNS64 lookup
+			q.Question[0].Qtype = dns.TypeA
+			dns64, err := resolve(config, clientHost, q)
+			if err != nil {
+				log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
+				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 				return
 			}
-
-			// Upstream error
-
-			// If this is the first upstream we count errors and try to switch if threshold exceeded
-			if i == 0 {
-				config.UpstreamErr += 1
-				if config.UpstreamErr > 3 {
-					// Demote upstream
-					config.Upstream = append(config.Upstream[1:], config.Upstream[0])
-					log.Printf("Threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
-				}
-
+			// Rewrite response
+			dns64.Question[0].Qtype = dns.TypeAAAA
+			for i, v := range dns64.Answer {
+				r := new(dns.AAAA)
+				r.Hdr = dns.RR_Header{Name: v.Header().Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: v.Header().Ttl}
+				r.AAAA = config.Dns64Prefix.IP
+				r.AAAA[12] = v.(*dns.A).A[0]
+				r.AAAA[13] = v.(*dns.A).A[1]
+				r.AAAA[14] = v.(*dns.A).A[2]
+				r.AAAA[15] = v.(*dns.A).A[3]
+				dns64.Answer[i] = r
+				log.Printf("DNS64 %s", r)
 			}
-			log.Print(err)
-
+			w.WriteMsg(dns64)
+			return
 		}
-		log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, name, dns.TypeToString[qtype])
-		w.WriteMsg(dnsErrorResponse(r, dns.RcodeServerFailure, errors.New("Upstream error")))
+
+		// Return msg
+		w.WriteMsg(out)
+	}
+}
+
+func CheckUpstream(upstream string) error {
+	_, err := resolveQname(upstream, ".", "NS")
+	if err != nil {
+		return fmt.Errorf("Invalid resolver: %s (%s)", upstream, err)
+	}
+	return nil
+}
+
+func resolveQname(resolver string, qname string, qtype string) (*dns.Msg, error) {
+	r := new(dns.Msg)
+	r.SetQuestion(qname, dns.StringToType[qtype])
+	if strings.HasPrefix(resolver, "https://") {
+		return dohRequest(r, resolver)
+	} else {
+		return dnsRequest(r, resolver)
 	}
 }
