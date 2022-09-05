@@ -109,7 +109,7 @@ func (c *DNSCache) Add(msg *dns.Msg) {
 	expires := now.Add(time.Second * time.Duration(minTTL))
 
 	key := DNSCacheKey{Name: dns.CanonicalName(msg.Question[0].Name), Qtype: msg.Question[0].Qtype}
-	val := DNSCacheItem{Message: msg, Inserted: now, Expires: expires, Permanent: false}
+	val := DNSCacheItem{Message: msg.Copy(), Inserted: now, Expires: expires, Permanent: false}
 
 	c.Lock()
 	defer c.Unlock()
@@ -154,6 +154,15 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 	return reply, true
 }
 
+func (c *DNSCache) Delete(query *dns.Msg) {
+
+	c.Lock()
+	defer c.Unlock()
+
+	key := DNSCacheKey{Name: dns.CanonicalName(query.Question[0].Name), Qtype: query.Question[0].Qtype}
+	delete(c.Cache, key)
+}
+
 func (c *DNSCache) Flush() (total, expired int) {
 
 	c.Lock()
@@ -169,4 +178,14 @@ func (c *DNSCache) Flush() (total, expired int) {
 		}
 	}
 	return
+}
+
+func (c *DNSCache) Debug() {
+
+	c.Lock()
+	defer c.Unlock()
+
+	for k, v := range c.Cache {
+		fmt.Printf("Cache: %s :: %s\n", k, v)
+	}
 }

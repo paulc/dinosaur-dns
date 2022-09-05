@@ -250,7 +250,7 @@ func main() {
 		for {
 			total, expired := config.Cache.Flush()
 			log.Printf("Cache: %d/%d (total/expired)", total, expired)
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Second * 30)
 		}
 	}()
 

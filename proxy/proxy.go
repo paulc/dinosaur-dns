@@ -100,15 +100,12 @@ func checkACL(acl []net.IPNet, client net.IP) bool {
 
 }
 
-func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dns.Msg, err error) {
-
-	qname := dns.CanonicalName(q.Question[0].Name)
-	qtype := q.Question[0].Qtype
+func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dns.Msg, err error, cached bool) {
 
 	// Check cache
 	out, found := config.Cache.Get(q)
 	if found {
-		log.Printf("Connection: %s <%s %s> [cached]", clientHost, qname, dns.TypeToString[qtype])
+		cached = true
 		return
 	}
 
@@ -122,13 +119,12 @@ func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dn
 		}
 
 		if err == nil {
-			// Cache response
-			config.Cache.Add(out)
 			// If this is the first upstream clear the error count
 			if i == 0 {
 				config.UpstreamErr = 0
 			}
-			log.Printf("Connection: %s <%s %s> [ok]", clientHost, qname, dns.TypeToString[qtype])
+			// Cache response
+			config.Cache.Add(out)
 			// Return
 			return
 		}
@@ -139,7 +135,7 @@ func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dn
 			if config.UpstreamErr > 3 {
 				// Demote upstream
 				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
-				log.Printf("Threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
+				log.Printf("Error threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
 			}
 
 		}
@@ -191,42 +187,55 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		}
 
 		// Resolve address
-		out, err := resolve(config, clientHost, q)
+		out, err, cached := resolve(config, clientHost, q)
 		if err != nil {
 			log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 			return
 		}
 
-		// DNS64
-		// XXX Check IPv6 connection ??
-		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 {
+		// If we get an empty answer for an AAA request and DNS64 is configured try to generate DNS64 response
+		// (only for queries from IPv6 address)
+		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 && clientIP.To4() == nil {
 			// Try DNS64 lookup
 			q.Question[0].Qtype = dns.TypeA
-			dns64, err := resolve(config, clientHost, q)
+			dns64_out, err, cached := resolve(config, clientHost, q)
 			if err != nil {
-				log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
+				log.Printf("DNS64: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 				return
 			}
 			// Rewrite response
-			dns64.Question[0].Qtype = dns.TypeAAAA
-			for i, v := range dns64.Answer {
-				r := new(dns.AAAA)
-				r.Hdr = dns.RR_Header{Name: v.Header().Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: v.Header().Ttl}
-				r.AAAA = config.Dns64Prefix.IP
-				r.AAAA[12] = v.(*dns.A).A[0]
-				r.AAAA[13] = v.(*dns.A).A[1]
-				r.AAAA[14] = v.(*dns.A).A[2]
-				r.AAAA[15] = v.(*dns.A).A[3]
-				dns64.Answer[i] = r
-				log.Printf("DNS64 %s", r)
+			dns64_out.Question[0].Qtype = dns.TypeAAAA
+			for i, v := range dns64_out.Answer {
+				if v.Header().Rrtype == dns.TypeA {
+					r := new(dns.AAAA)
+					r.Hdr = dns.RR_Header{Name: v.Header().Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: v.Header().Ttl}
+					r.AAAA = config.Dns64Prefix.IP
+					r.AAAA[12] = v.(*dns.A).A[0]
+					r.AAAA[13] = v.(*dns.A).A[1]
+					r.AAAA[14] = v.(*dns.A).A[2]
+					r.AAAA[15] = v.(*dns.A).A[3]
+					dns64_out.Answer[i] = r
+				} else {
+					// log.Printf("DNS64: Unexpected RR: %s", v)
+				}
 			}
-			w.WriteMsg(dns64)
+			if cached {
+				log.Printf("Connection: %s <%s %s> [dns64 cached]", clientHost, qname, dns.TypeToString[qtype])
+			} else {
+				log.Printf("Connection: %s <%s %s> [dns64 ok]", clientHost, qname, dns.TypeToString[qtype])
+			}
+			w.WriteMsg(dns64_out)
 			return
 		}
 
 		// Return msg
+		if cached {
+			log.Printf("Connection: %s <%s %s> [cached]", clientHost, qname, dns.TypeToString[qtype])
+		} else {
+			log.Printf("Connection: %s <%s %s> [ok]", clientHost, qname, dns.TypeToString[qtype])
+		}
 		w.WriteMsg(out)
 	}
 }
