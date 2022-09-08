@@ -84,7 +84,7 @@ func dnsErrorResponse(r *dns.Msg, rcode int, err error) *dns.Msg {
 	return m
 }
 
-func checkACL(acl []net.IPNet, client net.IP) bool {
+func checkAcl(acl []net.IPNet, client net.IP) bool {
 
 	// Default to permit all if no ACL set
 	if len(acl) == 0 {
@@ -165,7 +165,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// ParseIP doesnt handle IPv6 link local addresses correctly (...%ifname) so we strip interface
 		clientIP := net.ParseIP(regexp.MustCompile(`%.+$`).ReplaceAllString(clientHost, ""))
 
-		if !checkACL(config.ACL, clientIP) {
+		if !checkAcl(config.Acl, clientIP) {
 			log.Printf("Connection: %s [refused]", clientHost)
 			return
 		}

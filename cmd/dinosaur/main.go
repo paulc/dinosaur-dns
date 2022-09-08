@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur/api"
 	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
@@ -18,7 +19,7 @@ import (
 var logDebug func(...interface{})
 var logDebugf func(string, ...interface{})
 
-func ACLToString(acl []net.IPNet) (out []string) {
+func AclToString(acl []net.IPNet) (out []string) {
 	for _, v := range acl {
 		out = append(out, v.String())
 	}
@@ -44,6 +45,8 @@ func main() {
 	var configFlag = flag.String("config", "", "JSON config file")
 	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
+	var apiFlag = flag.Bool("api", false, "Enable API (default: false)")
+	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
 
 	var listenFlag util.MultiFlag
 	var blockFlag util.MultiFlag
@@ -171,7 +174,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("ACL Error (%s): %s", v, err)
 		}
-		config.ACL = append(config.ACL, *cidr)
+		config.Acl = append(config.Acl, *cidr)
 	}
 
 	// DNS64
@@ -187,6 +190,14 @@ func main() {
 				log.Fatalf("Dns64 Prefix Error (%s): Invalid prefix", *dns64PrefixFlag)
 			}
 			config.Dns64Prefix = *ipv6Net
+		}
+	}
+
+	// API
+	if *apiFlag {
+		config.Api = true
+		if *apiBindFlag != "" {
+			config.ApiBind = *apiBindFlag
 		}
 	}
 
@@ -254,11 +265,16 @@ func main() {
 		}
 	}()
 
+	// Start API
+	if config.Api {
+		go api.MakeApiHandler(config)()
+	}
+
 	log.Printf("Config: %+v", config)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
 	log.Printf("Blocklist: %d entries", config.BlockList.Count())
-	log.Printf("ACL: %s", strings.Join(ACLToString(config.ACL), " "))
+	log.Printf("ACL: %s", strings.Join(AclToString(config.Acl), " "))
 
 	// Wait
 	select {}

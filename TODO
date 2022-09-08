@@ -1,11 +1,11 @@
 
 [x] More flexible listen address (default :53 / v4/v6 only default address)
-[X] JSON config
-[ ] Link-local ACLs
+[x] JSON config
+[x] Link-local ACLs
 [ ] Improve error propogation
 [ ] More flexible logging
-[ ] DNS64
-[ ] Lock blocklist updates
+[x] DNS64
+[x] Lock blocklist updates
 [ ] API
 [ ] Dashboard
 [ ] Device Stats

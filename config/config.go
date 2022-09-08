@@ -20,19 +20,22 @@ type ProxyConfig struct {
 	UpstreamErr int
 	Cache       *cache.DNSCache
 	BlockList   *block.BlockList
-	ACL         []net.IPNet
+	Acl         []net.IPNet
 	Dns64       bool
 	Dns64Prefix net.IPNet
+	Api         bool
+	ApiBind     string
 }
 
 func NewProxyConfig() *ProxyConfig {
 	return &ProxyConfig{
 		ListenAddr:  make([]string, 0),
 		Upstream:    make([]string, 0),
-		ACL:         make([]net.IPNet, 0),
+		Acl:         make([]net.IPNet, 0),
 		Cache:       cache.NewDNSCache(),
 		BlockList:   block.NewBlockList(),
 		Dns64Prefix: net.IPNet{IP: net.ParseIP("64:ff9b::"), Mask: net.CIDRMask(96, 128)},
+		ApiBind:     "127.0.0.1:8553",
 	}
 }
 
@@ -49,6 +52,8 @@ type JSONProxyConfig struct {
 	Localzone          []string
 	Dns64              bool
 	Dns64Prefix        string `json:"dns64-prefix"`
+	Api                bool
+	ApiBind            string `json:"api-bind"`
 }
 
 func (c *ProxyConfig) LoadJSON(r io.Reader) error {
@@ -135,7 +140,7 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("ACL Error (%s): %s", v, err)
 		}
-		c.ACL = append(c.ACL, *cidr)
+		c.Acl = append(c.Acl, *cidr)
 	}
 
 	if json_config.Dns64 {
@@ -150,6 +155,13 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 				return fmt.Errorf("Dns64 Prefix Error (%s): Invalid prefix", json_config.Dns64Prefix)
 			}
 			c.Dns64Prefix = *ipv6Net
+		}
+	}
+
+	if json_config.Api {
+		c.Api = true
+		if json_config.ApiBind != "" {
+			c.ApiBind = json_config.ApiBind
 		}
 	}
 
