@@ -58,7 +58,7 @@ func (c *DNSCache) AddRR(entry string, permanent bool) error {
 
 	if rr == nil {
 		// No RR
-		return fmt.Errorf("Error creating RR: No valid RR")
+		return nil
 	}
 
 	// Construct template reply
