@@ -17,8 +17,13 @@ type BlockList struct {
 	Root *level
 }
 
+type blockEntry struct {
+	qtype uint16
+	count int
+}
+
 type level struct {
-	Leaves   map[string]uint16
+	Leaves   map[string]blockEntry
 	Children map[string]*level
 }
 
@@ -27,7 +32,7 @@ func NewBlockList() *BlockList {
 }
 
 func NewLevel() *level {
-	return &level{Leaves: make(map[string]uint16), Children: make(map[string]*level)}
+	return &level{Leaves: make(map[string]blockEntry), Children: make(map[string]*level)}
 }
 
 func (b *BlockList) Add(name string, qtype uint16) {
@@ -85,7 +90,7 @@ func (b *BlockList) MatchQ(qname string, qtype uint16) bool {
 	// Canonicalise name
 	parts := strings.Split(strings.ToLower(strings.TrimSuffix(qname, ".")), ".")
 	// Check root match
-	if v, ok := root.Leaves[""]; ok == true && v == dns.TypeANY || v == qtype {
+	if v, ok := root.Leaves[""]; ok == true && v.qtype == dns.TypeANY || v.qtype == qtype {
 		return true
 	}
 	return root.Match(parts[len(parts)-1], parts[:len(parts)-1], qtype)
@@ -101,6 +106,8 @@ func (b *BlockList) Delete(qname string) int {
 }
 
 func (b *BlockList) Count() int {
+	b.Lock()
+	defer b.Unlock()
 	return b.Root.Count()
 }
 
@@ -135,7 +142,7 @@ func (l *level) Add(name string, qtype uint16) {
 func (l *level) AddPart(last string, rest []string, qtype uint16) {
 	if len(rest) == 0 {
 		// Last element of name - insert into Leaves
-		l.Leaves[last] = qtype
+		l.Leaves[last] = blockEntry{qtype: qtype}
 		return
 	}
 	// Check for next node
@@ -158,7 +165,11 @@ func (l *level) AddPart(last string, rest []string, qtype uint16) {
 func (l *level) Match(last string, rest []string, qtype uint16) bool {
 	if v, ok := l.Leaves[last]; ok == true {
 		// Found leaf node
-		return v == dns.TypeANY || v == qtype
+		if v.qtype == dns.TypeANY || v.qtype == qtype {
+			// Increment count
+			v.count++
+			return true
+		}
 	}
 	next, found := l.Children[last]
 	if found && len(rest) > 0 {
