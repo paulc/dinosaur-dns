@@ -89,19 +89,19 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 	}
 
 	for _, v := range json_config.Local {
-		if err := c.Cache.AddPermanent(v); err != nil {
+		if err := c.Cache.AddRR(v, true); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.Localzone {
-		if err := util.URLReader(v, func(line string) error { return c.Cache.AddPermanent(line) }); err != nil {
+		if err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.Localzone {
-		if err := util.URLReader(v, func(line string) error { return c.Cache.AddPermanent(line) }); err != nil {
+		if err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
 			return err
 		}
 	}

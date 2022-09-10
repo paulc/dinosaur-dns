@@ -122,13 +122,13 @@ func main() {
 
 	// Add local cache entries
 	for _, v := range localZoneFlag {
-		if err := config.Cache.AddPermanent(v); err != nil {
+		if err := config.Cache.AddRR(v, true); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	for _, v := range localZoneFileFlag {
-		if err := util.URLReader(v, func(line string) error { return config.Cache.AddPermanent(line) }); err != nil {
+		if err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
 			log.Fatal(err)
 		}
 	}

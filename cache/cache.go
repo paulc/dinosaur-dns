@@ -49,7 +49,8 @@ func NewDNSCache() *DNSCache {
 	return &DNSCache{Cache: make(map[DNSCacheKey]DNSCacheItem)}
 }
 
-func (c *DNSCache) AddPermanent(entry string) error {
+func (c *DNSCache) AddRR(entry string, permanent bool) error {
+
 	rr, err := dns.NewRR(entry)
 	if err != nil {
 		return fmt.Errorf("Error creating RR: %s", err)
@@ -57,7 +58,7 @@ func (c *DNSCache) AddPermanent(entry string) error {
 
 	if rr == nil {
 		// No RR
-		return nil
+		return fmt.Errorf("Error creating RR: No valid RR")
 	}
 
 	// Construct template reply
@@ -65,13 +66,16 @@ func (c *DNSCache) AddPermanent(entry string) error {
 	msg := new(dns.Msg)
 	msg.SetQuestion(name, rr.Header().Rrtype)
 	msg.Response = true
-	msg.Authoritative = true
-	msg.RecursionAvailable = true
+	msg.Authoritative = permanent
+	msg.RecursionAvailable = false
 	msg.Rcode = dns.RcodeSuccess
 	msg.Answer = append(msg.Answer, rr)
 
+	now := timeNow()
+	expires := now.Add(time.Second * time.Duration(rr.Header().Ttl))
+
 	key := DNSCacheKey{Name: name, Qtype: rr.Header().Rrtype}
-	val := DNSCacheItem{Message: msg, Inserted: timeNow(), Expires: time.Time{}, Permanent: true}
+	val := DNSCacheItem{Message: msg, Inserted: timeNow(), Expires: expires, Permanent: permanent}
 
 	c.Lock()
 	defer c.Unlock()
@@ -163,6 +167,16 @@ func (c *DNSCache) Delete(query *dns.Msg) {
 	delete(c.Cache, key)
 }
 
+func (c *DNSCache) DeleteName(name string, qtype string) {
+
+	c.Lock()
+	defer c.Unlock()
+
+	// We ignore invalid qtype as delete will fail
+	key := DNSCacheKey{Name: dns.CanonicalName(name), Qtype: dns.StringToType[qtype]}
+	delete(c.Cache, key)
+}
+
 func (c *DNSCache) Flush() (total, expired int) {
 
 	c.Lock()
@@ -180,12 +194,14 @@ func (c *DNSCache) Flush() (total, expired int) {
 	return
 }
 
-func (c *DNSCache) Debug() {
+func (c *DNSCache) Debug() (result []string) {
 
 	c.Lock()
 	defer c.Unlock()
 
-	for k, v := range c.Cache {
-		fmt.Printf("Cache: %s :: %s\n", k, v)
+	for _, v := range c.Cache {
+		result = append(result, fmt.Sprintf("%s", v))
 	}
+
+	return
 }

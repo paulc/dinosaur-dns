@@ -138,7 +138,7 @@ func TestConcurrent(t *testing.T) {
 	wg.Add(2)
 
 	go func() {
-		for i := 0; i < 1000000; i++ {
+		for i := 0; i < 100000; i++ {
 			msg, _ := createCacheItem(fmt.Sprintf("%08d.test.com", i), "A", "0001.test.com. 5 IN A 1.2.3.4")
 			cache.Add(msg)
 		}
@@ -146,7 +146,7 @@ func TestConcurrent(t *testing.T) {
 	}()
 
 	go func() {
-		for i := 0; i < 1000000; i++ {
+		for i := 0; i < 100000; i++ {
 			q := createQuery(fmt.Sprintf("%08d.test.com", i), "A")
 			cache.Get(q)
 		}
@@ -164,10 +164,10 @@ func TestConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestAddPermanent(t *testing.T) {
+func TestAddRR(t *testing.T) {
 
 	cache := NewDNSCache()
-	err := cache.AddPermanent("abc.def.com 60 A 1.2.3.4")
+	err := cache.AddRR("abc.def.com 60 A 1.2.3.4", true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -177,6 +177,6 @@ func TestAddPermanent(t *testing.T) {
 	_, found := cache.Get(q)
 
 	if found == false {
-		t.Errorf("AddPermanent :: not found")
+		t.Errorf("AddRR :: not found")
 	}
 }

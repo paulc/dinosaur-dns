@@ -10,9 +10,99 @@ import (
 	"syscall"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/rpc/v2"
+	"github.com/gorilla/rpc/v2/json2"
+	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
 )
 
+type ApiService struct {
+	config *config.ProxyConfig
+}
+
+type EchoRequest struct {
+	Text string `json:"text"`
+}
+
+type EchoResponse struct {
+	Response string
+}
+
+func NewApiService(c *config.ProxyConfig) *ApiService {
+	return &ApiService{config: c}
+}
+
+// Manage Cache
+
+func (s *ApiService) CacheAdd(r *http.Request,
+	req *struct {
+		RR        string `json:"rr"`
+		Permanent bool   `json:"permanent"`
+	},
+	res *struct {
+	}) error {
+	return s.config.Cache.AddRR(req.RR, req.Permanent)
+}
+
+func (s *ApiService) CacheDelete(r *http.Request,
+	req *struct {
+		Name  string `json:"name"`
+		Qtype string `json:"qtype"`
+	},
+	res *struct {
+	}) error {
+	s.config.Cache.DeleteName(req.Name, req.Qtype)
+	return nil
+}
+
+func (s *ApiService) CacheDebug(r *http.Request,
+	req *struct {
+	},
+	res *struct {
+		Entries []string `json:"entries"`
+	}) error {
+	res.Entries = s.config.Cache.Debug()
+	return nil
+}
+
+// Manage Blocklist
+
+func (s *ApiService) BlockListCount(r *http.Request,
+	req *struct {
+	},
+	res *struct {
+		Count int `json:"count"`
+	}) error {
+	res.Count = s.config.BlockList.Count()
+	return nil
+}
+
+func (s *ApiService) BlockListAdd(r *http.Request,
+	req *struct {
+		Entries []string `json:"entries"`
+	},
+	res *struct {
+	}) error {
+	for _, v := range req.Entries {
+		if err := s.config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *ApiService) BlockListDelete(r *http.Request,
+	req *struct {
+		Name string `json:"name"`
+	},
+	res *struct {
+		Count int `json:"count"`
+	}) error {
+	res.Count = s.config.BlockList.Delete(req.Name)
+	return nil
+}
+
+// Bind to either Internet or UNIX Domain socket
 func bindListener(bindAddress string) (listener net.Listener, err error) {
 
 	if bindAddress[0] == '/' {
@@ -38,6 +128,10 @@ func bindListener(bindAddress string) (listener net.Listener, err error) {
 	return
 }
 
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "PONG")
+}
+
 func MakeApiHandler(config *config.ProxyConfig) func() {
 
 	return func() {
@@ -48,12 +142,16 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 			log.Fatalf("API listener could not bind [%s]: %s", config.ApiBind, err)
 		}
 
+		apiService := NewApiService(config)
+		apiServer := rpc.NewServer()
+		apiServer.RegisterCodec(json2.NewCodec(), "application/json")
+		apiServer.RegisterService(apiService, "api")
+
 		// Setup API handlers
 		router := mux.NewRouter()
 
-		router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "PONG")
-		})
+		router.HandleFunc("/ping", pingHandler)
+		router.Handle("/api", apiServer)
 
 		log.Printf("Starting API Listener: %s", config.ApiBind)
 
