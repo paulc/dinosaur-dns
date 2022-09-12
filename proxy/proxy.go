@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
+	"github.com/paulc/dinosaur/stats"
 )
 
 func matchDomain(domains []string, name string) bool {
@@ -179,10 +181,14 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		qname := dns.CanonicalName(q.Question[0].Name)
 		qtype := q.Question[0].Qtype
 
+		statsItem := stats.StatsItem{Timestamp: time.Now(), Client: clientAddr, Query: qname, Qtype: dns.TypeToString[qtype]}
+		defer config.StatsHandler.Add(&statsItem)
+
 		// Check blocklist
 		if config.BlockList.MatchQ(qname, qtype) {
 			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
+			statsItem.Blocked = true
 			return
 		}
 
@@ -191,6 +197,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		if err != nil {
 			log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
+			statsItem.Cached = true
 			return
 		}
 
@@ -203,6 +210,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			if err != nil {
 				log.Printf("DNS64: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
+				statsItem.Error = true
 				return
 			}
 			// Rewrite response
@@ -227,6 +235,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 				log.Printf("Connection: %s <%s %s> [dns64 ok]", clientHost, qname, dns.TypeToString[qtype])
 			}
 			w.WriteMsg(dns64_out)
+			statsItem.Cached = cached
 			return
 		}
 
@@ -236,6 +245,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		} else {
 			log.Printf("Connection: %s <%s %s> [ok]", clientHost, qname, dns.TypeToString[qtype])
 		}
+		statsItem.Cached = cached
 		w.WriteMsg(out)
 	}
 }

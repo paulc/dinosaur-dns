@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
+	"github.com/paulc/dinosaur/stats"
 )
 
 type ApiService struct {
@@ -132,6 +133,41 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "PONG")
 }
 
+func makeLogStreamHandler(statsHandler *stats.StatsHandler) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// SSE Headers
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		// Create log channel
+		logChan := make(chan string)
+		statsHandler.MakeLogChannel(r.RemoteAddr, logChan)
+
+		defer func() {
+			log.Printf("Log Handler Disconnected: %s\n", r.RemoteAddr)
+			// Close the log channel
+			statsHandler.CloseLogChannel(r.RemoteAddr)
+			close(logChan)
+		}()
+
+		// Create http.Flusher
+		flusher, _ := w.(http.Flusher)
+		for {
+			select {
+			case m := <-logChan:
+				fmt.Fprintf(w, "data: %s\n\n", m)
+				flusher.Flush()
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+
 func MakeApiHandler(config *config.ProxyConfig) func() {
 
 	return func() {
@@ -151,6 +187,7 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 		router := mux.NewRouter()
 
 		router.HandleFunc("/ping", pingHandler)
+		router.HandleFunc("/log", makeLogStreamHandler(config.StatsHandler))
 		router.Handle("/api", apiServer)
 
 		log.Printf("Starting API Listener: %s", config.ApiBind)
