@@ -12,96 +12,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
-	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/stats"
 )
-
-type ApiService struct {
-	config *config.ProxyConfig
-}
-
-type EchoRequest struct {
-	Text string `json:"text"`
-}
-
-type EchoResponse struct {
-	Response string
-}
-
-func NewApiService(c *config.ProxyConfig) *ApiService {
-	return &ApiService{config: c}
-}
-
-// Manage Cache
-
-func (s *ApiService) CacheAdd(r *http.Request,
-	req *struct {
-		RR        string `json:"rr"`
-		Permanent bool   `json:"permanent"`
-	},
-	res *struct {
-	}) error {
-	return s.config.Cache.AddRR(req.RR, req.Permanent)
-}
-
-func (s *ApiService) CacheDelete(r *http.Request,
-	req *struct {
-		Name  string `json:"name"`
-		Qtype string `json:"qtype"`
-	},
-	res *struct {
-	}) error {
-	s.config.Cache.DeleteName(req.Name, req.Qtype)
-	return nil
-}
-
-func (s *ApiService) CacheDebug(r *http.Request,
-	req *struct {
-	},
-	res *struct {
-		Entries []string `json:"entries"`
-	}) error {
-	res.Entries = s.config.Cache.Debug()
-	return nil
-}
-
-// Manage Blocklist
-
-func (s *ApiService) BlockListCount(r *http.Request,
-	req *struct {
-	},
-	res *struct {
-		Count int `json:"count"`
-	}) error {
-	res.Count = s.config.BlockList.Count()
-	return nil
-}
-
-func (s *ApiService) BlockListAdd(r *http.Request,
-	req *struct {
-		Entries []string `json:"entries"`
-	},
-	res *struct {
-	}) error {
-	for _, v := range req.Entries {
-		if err := s.config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *ApiService) BlockListDelete(r *http.Request,
-	req *struct {
-		Name string `json:"name"`
-	},
-	res *struct {
-		Count int `json:"count"`
-	}) error {
-	res.Count = s.config.BlockList.Delete(req.Name)
-	return nil
-}
 
 // Bind to either Internet or UNIX Domain socket
 func bindListener(bindAddress string) (listener net.Listener, err error) {
@@ -129,45 +41,6 @@ func bindListener(bindAddress string) (listener net.Listener, err error) {
 	return
 }
 
-func pingHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "PONG")
-}
-
-func makeLogStreamHandler(statsHandler *stats.StatsHandler) http.HandlerFunc {
-
-	return func(w http.ResponseWriter, r *http.Request) {
-
-		// SSE Headers
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
-		// Create log channel
-		logChan := make(chan string)
-		statsHandler.MakeLogChannel(r.RemoteAddr, logChan)
-
-		defer func() {
-			log.Printf("Log Handler Disconnected: %s\n", r.RemoteAddr)
-			// Close the log channel
-			statsHandler.CloseLogChannel(r.RemoteAddr)
-			close(logChan)
-		}()
-
-		// Create http.Flusher
-		flusher, _ := w.(http.Flusher)
-		for {
-			select {
-			case m := <-logChan:
-				fmt.Fprintf(w, "data: %s\n\n", m)
-				flusher.Flush()
-			case <-r.Context().Done():
-				return
-			}
-		}
-	}
-}
-
 func MakeApiHandler(config *config.ProxyConfig) func() {
 
 	return func() {
@@ -178,17 +51,21 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 			log.Fatalf("API listener could not bind [%s]: %s", config.ApiBind, err)
 		}
 
+		// JSON-RPC service
 		apiService := NewApiService(config)
 		apiServer := rpc.NewServer()
 		apiServer.RegisterCodec(json2.NewCodec(), "application/json")
 		apiServer.RegisterService(apiService, "api")
 
-		// Setup API handlers
+		// Setup Routes
 		router := mux.NewRouter()
 
-		router.HandleFunc("/ping", pingHandler)
-		router.HandleFunc("/log", makeLogStreamHandler(config.StatsHandler))
+		router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "PONG") })
 		router.Handle("/api", apiServer)
+		router.HandleFunc("/log", logPage)
+		router.HandleFunc("/logstream", makeLogStreamHandler(config.StatsHandler))
+
+		configWebRoutes(router.PathPrefix("/web").Subrouter())
 
 		log.Printf("Starting API Listener: %s", config.ApiBind)
 

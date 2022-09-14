@@ -181,7 +181,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		qname := dns.CanonicalName(q.Question[0].Name)
 		qtype := q.Question[0].Qtype
 
-		statsItem := stats.StatsItem{Timestamp: time.Now(), Client: clientAddr, Query: qname, Qtype: dns.TypeToString[qtype]}
+		statsItem := stats.StatsItem{Timestamp: time.Now(), Client: clientAddr, Qname: qname, Qtype: dns.TypeToString[qtype]}
 		defer config.StatsHandler.Add(&statsItem)
 
 		// Check blocklist

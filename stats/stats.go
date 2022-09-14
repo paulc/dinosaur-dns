@@ -8,7 +8,7 @@ import (
 type StatsItem struct {
 	Timestamp time.Time
 	Client    string
-	Query     string
+	Qname     string
 	Qtype     string
 	Blocked   bool
 	Cached    bool
@@ -17,17 +17,17 @@ type StatsItem struct {
 
 func (i StatsItem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Timestamp string
-		Client    string
-		Query     string
-		Type      string
-		Blocked   bool
-		Cached    bool
-		Error     bool
+		Timestamp string `json:"timestamp"`
+		Client    string `json:"client"`
+		Qname     string `json:"qname"`
+		Qtype     string `json:"qtype"`
+		Blocked   bool   `json:"blocked"`
+		Cached    bool   `json:"cached"`
+		Error     bool   `json:"error"`
 	}{
 		i.Timestamp.Format(time.RFC3339),
 		i.Client,
-		i.Query,
+		i.Qname,
 		i.Qtype,
 		i.Blocked,
 		i.Cached,
