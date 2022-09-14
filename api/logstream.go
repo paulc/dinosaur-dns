@@ -29,6 +29,7 @@ func logPage(w http.ResponseWriter, r *http.Request) {
 		item_pre.textContent = obj.timestamp + " :: " + obj.client + " " + obj.qname + " " + obj.qtype
 		item.appendChild(item_pre)
 		log.appendChild(item);
+		item.scrollIntoView()
 	}
 </script>
 </body>
