@@ -62,8 +62,12 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 
 		router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "PONG") })
 		router.Handle("/api", apiServer)
+
+		// Log handler
 		router.HandleFunc("/log", logPage)
 		router.HandleFunc("/logstream", makeLogStreamHandler(config.StatsHandler))
+
+		router.PathPrefix("/embed/").Handler(http.StripPrefix("/embed/", http.FileServer(http.Dir("./api/embed"))))
 
 		configWebRoutes(router.PathPrefix("/web").Subrouter())
 

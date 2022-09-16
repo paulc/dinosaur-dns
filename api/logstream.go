@@ -1,6 +1,7 @@
 package api
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,33 +9,11 @@ import (
 	"github.com/paulc/dinosaur/stats"
 )
 
+//go:embed embed/log.html
+var logHtml string
+
 func logPage(w http.ResponseWriter, r *http.Request) {
-
-	fmt.Fprintf(w, `
-<html>
-<head>
-<title>Log Viewer</title>
-</head>
-<body>
-<h3>Log Viewer</h3>
-<ul></ul>
-<script type="text/javascript">
-	const es = new EventSource("/logstream");
-	const log = document.querySelector("ul");
-	es.onmessage = (e) => { 
-	console.log(e)
-		const obj = JSON.parse(e.data)
-		const item = document.createElement("li");
-		const item_pre = document.createElement("pre");
-		item_pre.textContent = obj.timestamp + " :: " + obj.client + " " + obj.qname + " " + obj.qtype
-		item.appendChild(item_pre)
-		log.appendChild(item);
-		item.scrollIntoView()
-	}
-</script>
-</body>
-`)
-
+	fmt.Fprintf(w, logHtml)
 }
 
 func makeLogStreamHandler(statsHandler *stats.StatsHandler) http.HandlerFunc {
