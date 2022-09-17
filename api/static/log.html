@@ -1,20 +1,28 @@
 <html>
 <head>
 <title>Log Viewer</title>
-<script defer type="module" src="/embed/log.mjs"></script>
+<script defer type="module" src="log.mjs"></script>
 </head>
 <body>
 <h3>Log Viewer</h3>
 <ul x-data="log">
   <div>
-    <tt>Show:</tt>
-    <select x-model.number="visible" x-on:change="updateView()">
-      <option>10</option>
-      <option>20</option>
-      <option>50</option>
-      <option>100</option>
-    </select>
-    <tt><span x-text="buffer.stats()"></span></tt></div>
+    <tt>
+      Show:
+      <select x-model.number="visible" x-on:change="updateView()">
+        <option>10</option>
+        <option>20</option>
+        <option>50</option>
+        <option>100</option>
+      </select>
+      <input type="checkbox" id="pause" x-model="paused" x-on:change="pause()"><label for="pause" x-text="paused ? `Paused [${pausedPosition}]` : 'Pause'"></label>
+      <span x-show="paused">
+        <button x-on:click="pageBack()">&lt;&lt;</button>
+        <button x-on:click="pageForward()">&gt;&gt;</button>
+      </span>
+      &nbsp;
+      <span x-text="buffer.stats()"></span>
+    </tt>
   </div>
   <tt>
   <table style="border: 2px solid; table-layout: fixed; width: 100%">

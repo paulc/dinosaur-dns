@@ -9,14 +9,7 @@ import (
 	"github.com/paulc/dinosaur/stats"
 )
 
-//go:embed embed/log.html
-var logHtml string
-
-func logPage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, logHtml)
-}
-
-func makeLogStreamHandler(statsHandler *stats.StatsHandler) http.HandlerFunc {
+func makeLogHandler(statsHandler *stats.StatsHandler) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 

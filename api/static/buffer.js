@@ -1,3 +1,4 @@
+
 export class Buffer {
 
   constructor(n) {
@@ -31,13 +32,29 @@ export class Buffer {
     return out
   }
 
-  filter(n,f) {
+  getPosition() {
+    return this.pointer
+  }
+
+  calculateAvailable(pos) {
+    if (pos == this.pointer) {
+      return this.length
+    } else if (pos < this.pointer) {
+      return this.length - (this.pointer - pos)
+    } else {
+      return pos - this.pointer
+    }
+  }
+
+  filter(n,f,p) {
     f = f ?? ((i) => true)
+    p = p ?? this.pointer
+    const avail = this.calculateAvailable(p)
+    const count = Math.min(n,avail)
     const out = []
-    const count = Math.min(n,this.length)
     let i = 1
-    while ((out.length < count) && (i <= this.length)) {
-      let pos = this.pointer - i
+    while ((out.length < count) && (i <= avail)) {
+      let pos = p - i
       if (pos < 0) {
         pos = this.length + pos
       }
@@ -48,6 +65,10 @@ export class Buffer {
       i++
     }
     return out
+  }
+
+  wrapPos(pos) {
+    return (pos < 0) ? this.length + pos : (pos > this.length) ? pos - this.length : pos
   }
 
   stats() {

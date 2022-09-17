@@ -1,6 +1,7 @@
 package api
 
 import (
+	"embed"
 	"fmt"
 	"log"
 	"net"
@@ -14,6 +15,9 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/paulc/dinosaur/config"
 )
+
+//go:embed static/*
+var static embed.FS
 
 // Bind to either Internet or UNIX Domain socket
 func bindListener(bindAddress string) (listener net.Listener, err error) {
@@ -61,15 +65,18 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 		router := mux.NewRouter()
 
 		router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "PONG") })
+
+		// API
 		router.Handle("/api", apiServer)
 
 		// Log handler
-		router.HandleFunc("/log", logPage)
-		router.HandleFunc("/logstream", makeLogStreamHandler(config.StatsHandler))
+		router.HandleFunc("/log", makeLogHandler(config.StatsHandler))
 
-		router.PathPrefix("/embed/").Handler(http.StripPrefix("/embed/", http.FileServer(http.Dir("./api/embed"))))
+		// Static files
+		router.PathPrefix("/static/").Handler(http.FileServer(http.FS(static)))
 
-		configWebRoutes(router.PathPrefix("/web").Subrouter())
+		// For testing provide access to FS
+		router.PathPrefix("/test/").Handler(http.StripPrefix("/test/", http.FileServer(http.Dir("./api/static"))))
 
 		log.Printf("Starting API Listener: %s", config.ApiBind)
 
