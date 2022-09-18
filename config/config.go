@@ -98,13 +98,13 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 	}
 
 	for _, v := range json_config.Localzone {
-		if err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
+		if _, err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.Localzone {
-		if err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
+		if _, err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
 			return err
 		}
 	}
@@ -116,19 +116,19 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 	}
 
 	for _, v := range json_config.Blocklist {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeANY)); err != nil {
+		if _, err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeANY)); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.BlocklistAAAA {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeAAAA)); err != nil {
+		if _, err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeAAAA)); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.BlocklistFromHosts {
-		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(c.BlockList)); err != nil {
+		if _, err := util.URLReader(v, block.MakeBlockListHostsReaderf(c.BlockList)); err != nil {
 			return err
 		}
 	}

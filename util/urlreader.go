@@ -32,24 +32,25 @@ func UrlOpen(arg string) (io.ReadCloser, error) {
 }
 
 // Call f for each line in io.Reader
-func LineReader(r io.Reader, f func(s string) error) error {
+func LineReader(r io.Reader, f func(s string) error) (count int, err error) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		if err := f(scanner.Text()); err != nil {
-			return fmt.Errorf("Error calling line function: %s", err)
+			return count, fmt.Errorf("Error calling line function: %s", err)
 		}
+		count++
 	}
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("Scanner Error: %s", err)
+		return count, fmt.Errorf("Scanner Error: %s", err)
 	}
-	return nil
+	return count, nil
 }
 
 // Open file/url and run f for each line
-func URLReader(url string, f func(s string) error) error {
+func URLReader(url string, f func(s string) error) (int, error) {
 	r, err := UrlOpen(url)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer r.Close()
 

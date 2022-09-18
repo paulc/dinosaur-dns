@@ -128,7 +128,7 @@ func main() {
 	}
 
 	for _, v := range localZoneFileFlag {
-		if err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
+		if _, err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -142,7 +142,7 @@ func main() {
 
 	// Get blocklist from file/url entries
 	for _, v := range blocklistFlag {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
+		if _, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -150,14 +150,14 @@ func main() {
 	// Get AAAA blocklist from file/url entries (convenience function - mostly so that you can
 	// use Netflix CDN list from https://openconnect.netflix.com/mobiledeliverydomains.txt)
 	for _, v := range blocklistAAAAFlag {
-		if err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
+		if _, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// Get blocklist from file/url entries
 	for _, v := range blocklistHostsFlag {
-		if err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
+		if _, err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
 			log.Fatal(err)
 		}
 	}

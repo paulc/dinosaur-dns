@@ -14,7 +14,22 @@ import (
 
 type BlockList struct {
 	sync.RWMutex
-	Root *level
+	// We store the blocklist sources so that we can refresh
+	BlockEntries     []string
+	BlocklistEntries []struct {
+		Name  string
+		Count int
+	}
+	BlocklistAAAAEntries []struct {
+		Name  string
+		Count int
+	}
+	BlocklistHostsEntries []struct {
+		Name  string
+		Count int
+	}
+	BlockDeleteEntries []string
+	Root               *level
 }
 
 type level struct {
