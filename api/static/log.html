@@ -4,10 +4,10 @@
 <script defer type="module" src="log.mjs"></script>
 </head>
 <body>
-<h3>Log Viewer</h3>
-<ul x-data="log">
-  <div>
-    <tt>
+<tt>
+  <h3>Log Viewer | <a href="block.html">Blocklist</a> | <a href="cache.html">Cache</a></h3>
+  <div x-data="log">
+    <div>
       Show:
       <select x-model.number="visible" x-on:change="updateView()">
         <option>10</option>
@@ -22,39 +22,39 @@
       </span>
       &nbsp;
       <span x-text="buffer.stats()"></span>
-    </tt>
-  </div>
-  <tt>
-  <table style="border: 2px solid; table-layout: fixed; width: 100%">
-    <thead>
-      <tr>
-        <th style="width: 25%; text-align: left">Time:</th>
-        <th style="width: 15%; text-align: left">Client:</th>
-        <th style="width: 35%; text-align: left">Qname:</th>
-        <th style="width: 10%; text-align: left">Qtype:</th>
-        <th style="width: 15%; text-align: left">Status:</th>
-      </tr>
-      <tr style="border: 5px solid">
-        <td><input style="width: 80%" x-model="filterOptions.date" x-on:keydown="updateFilter()"></td>
-        <td><input style="width: 80%" x-model="filterOptions.client" x-on:keydown="updateFilter()"></td>
-        <td><input style="width: 80%" x-model="filterOptions.qname" x-on:keydown="updateFilter()"></td>
-        <td><input style="width: 80%" x-model="filterOptions.qtype" x-on:keydown="updateFilter()"></td>
-        <td><input style="width: 80%" x-model="filterOptions.status" x-on:keydown="updateFilter()"></td>
-      </tr>
-    </thead>
-    <tbody>
-      <template x-for="i in view">
+    </div>
+    <table style="border: 2px solid; table-layout: fixed; width: 100%">
+      <thead>
         <tr>
-          <td x-text="i.date.toUTCString()"></td>
-          <td x-text="i.client"></td>
-          <td x-text="i.qname"></td>
-          <td x-text="i.qtype"></td>
-          <td x-text="formatStatus(i)"></td>
+          <th style="width: 25%; text-align: left">Time:</th>
+          <th style="width: 15%; text-align: left">Client:</th>
+          <th style="width: 35%; text-align: left">Qname:</th>
+          <th style="width: 10%; text-align: left">Qtype:</th>
+          <th style="width: 15%; text-align: left">Status:</th>
         </tr>
-      </template>
-    </tbody>
-  </table>
-  </tt>
-</ul>
-</script>
+        <tr style="border: 5px solid">
+          <td><input style="width: 80%" x-model="filterOptions.date" x-on:keydown="updateFilter()"></td>
+          <td><input style="width: 80%" x-model="filterOptions.client" x-on:keydown="updateFilter()"></td>
+          <td><input style="width: 80%" x-model="filterOptions.qname" x-on:keydown="updateFilter()"></td>
+          <td><input style="width: 80%" x-model="filterOptions.qtype" x-on:keydown="updateFilter()"></td>
+          <td><input style="width: 80%" x-model="filterOptions.status" x-on:keydown="updateFilter()"></td>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="i in view">
+          <tr>
+            <td x-text="i.date.toUTCString()"></td>
+            <td x-text="i.client"></td>
+            <td><span x-text="i.qname"></span><span style="cursor: pointer" x-on:click="(e) => api.call('api.BlockListAdd',{entries:[i.qname]})">&nbsp;🚫</span></td>
+            <td x-text="i.qtype"></td>
+            <td x-text="formatStatus(i)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    <div>
+      Messages: 
+    </div>
+  </div>
+</tt>
 </body>

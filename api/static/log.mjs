@@ -3,6 +3,8 @@
 //
 import { default as Alpine } from "./alpine.js"
 import { Buffer } from "./buffer.js"
+import { RPC } from "./rpc.js"
+
 
 const log = () => ({
 
@@ -14,6 +16,7 @@ const log = () => ({
   visible: 20,
   filter: undefined,
   filterOptions: { date: "", qname: "", client: "", qtype: "", status: "" },
+  api: new RPC('/api'),
 
   init() { 
     const es = new EventSource("/log")
@@ -63,7 +66,6 @@ const log = () => ({
 
   pageBack() {
     const avail = this.buffer.calculateAvailable(this.pausedPosition)
-    console.log("back:",avail)
     if (avail > this.visible) {
       this.pausedPosition = this.buffer.wrapPos(this.pausedPosition - this.visible)
       this.update = true
@@ -107,3 +109,4 @@ const log = () => ({
 
 Alpine.data('log',log)
 Alpine.start()
+
