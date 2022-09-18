@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/config"
 )
 
@@ -49,6 +50,11 @@ func (s *ApiService) CacheDebug(r *http.Request,
 }
 
 // Manage Blocklist
+
+func (s *ApiService) BlockListSources(r *http.Request, req *struct{}, res *block.BlockListSource) error {
+	*res = s.config.BlockList.Sources
+	return nil
+}
 
 func (s *ApiService) BlockListCount(r *http.Request,
 	req *struct {

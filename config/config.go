@@ -59,7 +59,7 @@ type JSONProxyConfig struct {
 	ApiBind            string `json:"api-bind"`
 }
 
-func (c *ProxyConfig) LoadJSON(r io.Reader) error {
+func (config *ProxyConfig) LoadJSON(r io.Reader) error {
 
 	var json_config JSONProxyConfig
 
@@ -78,7 +78,7 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 			return err
 		} else {
 			for _, v := range addrs {
-				c.ListenAddr = append(c.ListenAddr, v)
+				config.ListenAddr = append(config.ListenAddr, v)
 			}
 		}
 	}
@@ -88,54 +88,56 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 		if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
 			v += ":53"
 		}
-		c.Upstream = append(c.Upstream, v)
+		config.Upstream = append(config.Upstream, v)
 	}
 
 	for _, v := range json_config.Local {
-		if err := c.Cache.AddRR(v, true); err != nil {
+		if err := config.Cache.AddRR(v, true); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.Localzone {
-		if _, err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
-			return err
-		}
-	}
-
-	for _, v := range json_config.Localzone {
-		if _, err := util.URLReader(v, func(line string) error { return c.Cache.AddRR(line, true) }); err != nil {
+		if _, err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
 			return err
 		}
 	}
 
 	for _, v := range json_config.Block {
-		if err := c.BlockList.AddEntry(v, dns.TypeANY); err != nil {
+		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			return err
 		}
+		config.BlockList.Sources.BlockEntries = append(config.BlockList.Sources.BlockEntries, v)
 	}
 
 	for _, v := range json_config.Blocklist {
-		if _, err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeANY)); err != nil {
+		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
 			return err
+		} else {
+			config.BlockList.Sources.BlocklistEntries = append(config.BlockList.Sources.BlocklistEntries, block.BlockListSourceEntry{v, n})
 		}
 	}
 
 	for _, v := range json_config.BlocklistAAAA {
-		if _, err := util.URLReader(v, block.MakeBlockListReaderf(c.BlockList, dns.TypeAAAA)); err != nil {
+		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
 			return err
+		} else {
+			config.BlockList.Sources.BlocklistAAAAEntries = append(config.BlockList.Sources.BlocklistAAAAEntries, block.BlockListSourceEntry{v, n})
 		}
 	}
 
 	for _, v := range json_config.BlocklistFromHosts {
-		if _, err := util.URLReader(v, block.MakeBlockListHostsReaderf(c.BlockList)); err != nil {
+		if n, err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
 			return err
+		} else {
+			config.BlockList.Sources.BlocklistHostsEntries = append(config.BlockList.Sources.BlocklistHostsEntries, block.BlockListSourceEntry{v, n})
 		}
 	}
 
 	// Delete blocklist entries last
 	for _, v := range json_config.BlockDelete {
-		c.BlockList.Delete(v)
+		config.BlockList.Delete(v)
+		config.BlockList.Sources.BlockDeleteEntries = append(config.BlockList.Sources.BlockDeleteEntries, v)
 	}
 
 	for _, v := range json_config.Acl {
@@ -143,11 +145,11 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("ACL Error (%s): %s", v, err)
 		}
-		c.Acl = append(c.Acl, *cidr)
+		config.Acl = append(config.Acl, *cidr)
 	}
 
 	if json_config.Dns64 {
-		c.Dns64 = true
+		config.Dns64 = true
 		if json_config.Dns64Prefix != "" {
 			_, ipv6Net, err := net.ParseCIDR(json_config.Dns64Prefix)
 			if err != nil {
@@ -157,14 +159,14 @@ func (c *ProxyConfig) LoadJSON(r io.Reader) error {
 			if ones != 96 || bits != 128 {
 				return fmt.Errorf("Dns64 Prefix Error (%s): Invalid prefix", json_config.Dns64Prefix)
 			}
-			c.Dns64Prefix = *ipv6Net
+			config.Dns64Prefix = *ipv6Net
 		}
 	}
 
 	if json_config.Api {
-		c.Api = true
+		config.Api = true
 		if json_config.ApiBind != "" {
-			c.ApiBind = json_config.ApiBind
+			config.ApiBind = json_config.ApiBind
 		}
 	}
 

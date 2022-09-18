@@ -138,33 +138,41 @@ func main() {
 		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			log.Fatal(err)
 		}
+		config.BlockList.Sources.BlockEntries = append(config.BlockList.Sources.BlockEntries, v)
 	}
 
 	// Get blocklist from file/url entries
 	for _, v := range blocklistFlag {
-		if _, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
+		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
 			log.Fatal(err)
+		} else {
+			config.BlockList.Sources.BlocklistEntries = append(config.BlockList.Sources.BlocklistEntries, block.BlockListSourceEntry{v, n})
 		}
 	}
 
 	// Get AAAA blocklist from file/url entries (convenience function - mostly so that you can
 	// use Netflix CDN list from https://openconnect.netflix.com/mobiledeliverydomains.txt)
 	for _, v := range blocklistAAAAFlag {
-		if _, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
+		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
 			log.Fatal(err)
+		} else {
+			config.BlockList.Sources.BlocklistAAAAEntries = append(config.BlockList.Sources.BlocklistAAAAEntries, block.BlockListSourceEntry{v, n})
 		}
 	}
 
 	// Get blocklist from file/url entries
 	for _, v := range blocklistHostsFlag {
-		if _, err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
+		if n, err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
 			log.Fatal(err)
+		} else {
+			config.BlockList.Sources.BlocklistHostsEntries = append(config.BlockList.Sources.BlocklistHostsEntries, block.BlockListSourceEntry{v, n})
 		}
 	}
 
 	// Delete entries last (allows us to delete specific entries from blocklist/BlocklistHosts
 	for _, v := range blockDeleteFlag {
 		n := config.BlockList.Delete(v)
+		config.BlockList.Sources.BlockDeleteEntries = append(config.BlockList.Sources.BlockDeleteEntries, v)
 		log.Printf("BlockList Delete: %s (%d records)", v, n)
 	}
 
@@ -271,6 +279,7 @@ func main() {
 	}
 
 	log.Printf("Config: %+v", config)
+	log.Printf("Blocklist Sources: %+v", config.BlockList.Sources)
 	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
 	log.Printf("Blocklist: %d entries", config.BlockList.Count())

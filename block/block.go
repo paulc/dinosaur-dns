@@ -12,24 +12,24 @@ import (
 // We use a slightly modified radix trie to contain the blocklist
 // (split leaves from children)
 
+type BlockListSource struct {
+	BlockEntries          []string               `json:"block"`
+	BlockDeleteEntries    []string               `json:"block-delete"`
+	BlocklistEntries      []BlockListSourceEntry `json:"blocklist"`
+	BlocklistAAAAEntries  []BlockListSourceEntry `json:"blocklist-aaaa"`
+	BlocklistHostsEntries []BlockListSourceEntry `json:"blocklist-hosts"`
+}
+
+type BlockListSourceEntry struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
 type BlockList struct {
 	sync.RWMutex
 	// We store the blocklist sources so that we can refresh
-	BlockEntries     []string
-	BlocklistEntries []struct {
-		Name  string
-		Count int
-	}
-	BlocklistAAAAEntries []struct {
-		Name  string
-		Count int
-	}
-	BlocklistHostsEntries []struct {
-		Name  string
-		Count int
-	}
-	BlockDeleteEntries []string
-	Root               *level
+	Sources BlockListSource
+	Root    *level
 }
 
 type level struct {
