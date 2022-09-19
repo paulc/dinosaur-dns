@@ -1,0 +1,14 @@
+<html>
+<head>
+<title>Status</title>
+<script defer type="module" src="status.mjs"></script>
+</head>
+<body>
+<tt>
+  <h3>Status | <a href="log.html">Log Viewer</a> | <a href="block.html">Blocklist</a> | <a href="cache.html">Cache</a></h3>
+  <div x-data="status">
+    <pre x-text="JSON.stringify(config,undefined,2)">
+    </pre>
+  </div>
+</tt>
+</body>

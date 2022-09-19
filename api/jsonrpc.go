@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/config"
 )
 
@@ -14,6 +13,13 @@ type ApiService struct {
 
 func NewApiService(c *config.ProxyConfig) *ApiService {
 	return &ApiService{config: c}
+}
+
+// Get config
+
+func (s *ApiService) Config(r *http.Request, req *struct{}, res *config.UserConfig) error {
+	*res = *s.config.UserConfig
+	return nil
 }
 
 // Manage Cache
@@ -50,11 +56,6 @@ func (s *ApiService) CacheDebug(r *http.Request,
 }
 
 // Manage Blocklist
-
-func (s *ApiService) BlockListSources(r *http.Request, req *struct{}, res *block.BlockListSource) error {
-	*res = s.config.BlockList.Sources
-	return nil
-}
 
 func (s *ApiService) BlockListCount(r *http.Request,
 	req *struct {

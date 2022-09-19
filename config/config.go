@@ -20,6 +20,7 @@ type ProxyConfig struct {
 	Api          bool
 	ApiBind      string
 	StatsHandler *stats.StatsHandler
+	UserConfig   *UserConfig
 }
 
 func NewProxyConfig() *ProxyConfig {

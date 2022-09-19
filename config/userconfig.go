@@ -43,8 +43,10 @@ func NewUserConfig() *UserConfig {
 	}
 }
 
+// Generate config from user options
 func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 
+	// Listen addresses
 	for _, v := range user_config.Listen {
 		if addrs, err := util.ParseAddr(v, 53); err != nil {
 			return err
@@ -55,6 +57,7 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		}
 	}
 
+	// Upstream resolvers
 	for _, v := range user_config.Upstream {
 		// Add default port if not specified for non DoH
 		if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
@@ -63,55 +66,26 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		config.Upstream = append(config.Upstream, v)
 	}
 
+	// Generate blocklist
+	if err := user_config.UpdateBlockList(config.BlockList); err != nil {
+		return err
+	}
+
+	// Local RRs
 	for _, v := range user_config.Local {
 		if err := config.Cache.AddRR(v, true); err != nil {
 			return err
 		}
 	}
 
+	// Local RR file/url
 	for _, v := range user_config.Localzone {
 		if _, err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
 			return err
 		}
 	}
 
-	for _, v := range user_config.Block {
-		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
-			return err
-		}
-		config.BlockList.Sources.BlockEntries = append(config.BlockList.Sources.BlockEntries, v)
-	}
-
-	for _, v := range user_config.Blocklist {
-		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
-			return err
-		} else {
-			config.BlockList.Sources.BlocklistEntries = append(config.BlockList.Sources.BlocklistEntries, block.BlockListSourceEntry{v, n})
-		}
-	}
-
-	for _, v := range user_config.BlocklistAAAA {
-		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
-			return err
-		} else {
-			config.BlockList.Sources.BlocklistAAAAEntries = append(config.BlockList.Sources.BlocklistAAAAEntries, block.BlockListSourceEntry{v, n})
-		}
-	}
-
-	for _, v := range user_config.BlocklistFromHosts {
-		if n, err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
-			return err
-		} else {
-			config.BlockList.Sources.BlocklistHostsEntries = append(config.BlockList.Sources.BlocklistHostsEntries, block.BlockListSourceEntry{v, n})
-		}
-	}
-
-	// Delete blocklist entries last
-	for _, v := range user_config.BlockDelete {
-		config.BlockList.Delete(v)
-		config.BlockList.Sources.BlockDeleteEntries = append(config.BlockList.Sources.BlockDeleteEntries, v)
-	}
-
+	// Access control list
 	for _, v := range user_config.Acl {
 		_, cidr, err := net.ParseCIDR(v)
 		if err != nil {
@@ -120,6 +94,7 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		config.Acl = append(config.Acl, *cidr)
 	}
 
+	// DNS64
 	if user_config.Dns64 {
 		config.Dns64 = true
 		if user_config.Dns64Prefix != "" {
@@ -135,11 +110,52 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		}
 	}
 
+	// API
 	if user_config.Api {
 		config.Api = true
 		if user_config.ApiBind != "" {
 			config.ApiBind = user_config.ApiBind
 		}
+	}
+
+	config.UserConfig = user_config
+
+	return nil
+}
+
+func (user_config *UserConfig) UpdateBlockList(bl *block.BlockList) error {
+
+	// Block entries
+	for _, v := range user_config.Block {
+		if err := bl.AddEntry(v, dns.TypeANY); err != nil {
+			return err
+		}
+	}
+
+	// Blocklist file/url
+	for _, v := range user_config.Blocklist {
+		if _, err := util.URLReader(v, block.MakeBlockListReaderf(bl, dns.TypeANY)); err != nil {
+			return err
+		}
+	}
+
+	// Blocklist file/url (AAAA)
+	for _, v := range user_config.BlocklistAAAA {
+		if _, err := util.URLReader(v, block.MakeBlockListReaderf(bl, dns.TypeAAAA)); err != nil {
+			return err
+		}
+	}
+
+	// Blocklist hosts file
+	for _, v := range user_config.BlocklistFromHosts {
+		if _, err := util.URLReader(v, block.MakeBlockListHostsReaderf(bl)); err != nil {
+			return err
+		}
+	}
+
+	// Delete blocklist entries last
+	for _, v := range user_config.BlockDelete {
+		bl.Delete(v)
 	}
 
 	return nil

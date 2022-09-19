@@ -43,7 +43,7 @@ func main() {
 
 	proxy_config := config.NewProxyConfig()
 	if err := user_config.GetProxyConfig(proxy_config); err != nil {
-		log.Fatal("Config Error:", err)
+		log.Fatal("Config Error: ", err)
 	}
 	fmt.Printf("%+v\n", proxy_config)
 
@@ -102,8 +102,6 @@ func main() {
 		go api.MakeApiHandler(proxy_config)()
 	}
 
-	log.Printf("proxy_config: %+v", proxy_config)
-	log.Printf("Blocklist Sources: %+v", proxy_config.BlockList.Sources)
 	log.Printf("Started server: %s", strings.Join(proxy_config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(proxy_config.Upstream, " "))
 	log.Printf("Blocklist: %d entries", proxy_config.BlockList.Count())
