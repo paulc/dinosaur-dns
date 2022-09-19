@@ -201,7 +201,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			return
 		}
 
-		// If we get an empty answer for an AAA request and DNS64 is configured try to generate DNS64 response
+		// If we get an empty answer for an AAAA request and DNS64 is configured try to generate DNS64 response
 		// (only for queries from IPv6 address)
 		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 && clientIP.To4() == nil {
 			// Try DNS64 lookup

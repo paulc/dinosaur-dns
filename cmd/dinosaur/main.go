@@ -1,23 +1,18 @@
 package main
 
 import (
-	"flag"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/api"
-	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
-	"github.com/paulc/dinosaur/util"
 )
-
-var logDebug func(...interface{})
-var logDebugf func(string, ...interface{})
 
 func AclToString(acl []net.IPNet) (out []string) {
 	for _, v := range acl {
@@ -38,193 +33,22 @@ func isV6Global(hostport string) bool {
 
 func main() {
 
-	// Command line flags
-
-	var helpFlag = flag.Bool("help", false, "Show usage")
-	var debugFlag = flag.Bool("debug", false, "Debug")
-	var configFlag = flag.String("config", "", "JSON config file")
-	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
-	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
-	var apiFlag = flag.Bool("api", false, "Enable API (default: false)")
-	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
-
-	var listenFlag util.MultiFlag
-	var blockFlag util.MultiFlag
-	var blockDeleteFlag util.MultiFlag
-	var blocklistFlag util.MultiFlag
-	var blocklistAAAAFlag util.MultiFlag
-	var blocklistHostsFlag util.MultiFlag
-	var upstreamFlag util.MultiFlag
-	var localZoneFlag util.MultiFlag
-	var localZoneFileFlag util.MultiFlag
-	var aclFlag util.MultiFlag
-
-	flag.Var(&listenFlag, "listen", "Listen address (default: 127.0.0.1:8053)")
-	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
-	flag.Var(&blockFlag, "block", "Block entry (format: 'domain[:qtype]')")
-	flag.Var(&blockDeleteFlag, "block-delete", "Delete block entry (format: 'domain[:qtype]')")
-	flag.Var(&blocklistFlag, "blocklist", "Blocklist file")
-	flag.Var(&blocklistAAAAFlag, "blocklist-aaaa", "Blocklist file (AAAA)")
-	flag.Var(&blocklistHostsFlag, "blocklist-from-hosts", "Blocklist from /etc/hosts format file")
-	flag.Var(&localZoneFlag, "local", "Local DNS resource record")
-	flag.Var(&localZoneFileFlag, "localzone", "Local DNS resource record file")
-	flag.Var(&aclFlag, "acl", "Access control list (CIDR)")
-
-	flag.Parse()
-
-	if *helpFlag {
-		flag.Usage()
-		return
+	user_config, err := GetUserConfig()
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	if *debugFlag {
-		logDebug = log.Print
-		logDebugf = log.Printf
-	} else {
-		logDebug = func(v ...interface{}) {}
-		logDebugf = func(f string, v ...interface{}) {}
+	json_config, _ := json.MarshalIndent(user_config, "", "  ")
+	fmt.Printf("%s\n", string(json_config))
+
+	proxy_config := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(proxy_config); err != nil {
+		log.Fatal("Config Error:", err)
 	}
-
-	// Initialise config
-	config := config.NewProxyConfig()
-
-	// Get JSON config first
-	if len(*configFlag) != 0 {
-		r, err := util.UrlOpen(*configFlag)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer r.Close()
-		if err := config.LoadJSON(r); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	// Get listen address
-	for _, v := range listenFlag {
-		addrs, err := util.ParseAddr(v, 53)
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, v := range addrs {
-			config.ListenAddr = append(config.ListenAddr, v)
-		}
-	}
-
-	// Get upstream resolvers
-	for _, v := range upstreamFlag {
-		// Add default port if not specified for non DoH
-		if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
-			v += ":53"
-		}
-		config.Upstream = append(config.Upstream, v)
-	}
-
-	// Add local cache entries
-	for _, v := range localZoneFlag {
-		if err := config.Cache.AddRR(v, true); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	for _, v := range localZoneFileFlag {
-		if _, err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	// Get individual blocklist entries
-	for _, v := range blockFlag {
-		if err := config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
-			log.Fatal(err)
-		}
-		config.BlockList.Sources.BlockEntries = append(config.BlockList.Sources.BlockEntries, v)
-	}
-
-	// Get blocklist from file/url entries
-	for _, v := range blocklistFlag {
-		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeANY)); err != nil {
-			log.Fatal(err)
-		} else {
-			config.BlockList.Sources.BlocklistEntries = append(config.BlockList.Sources.BlocklistEntries, block.BlockListSourceEntry{v, n})
-		}
-	}
-
-	// Get AAAA blocklist from file/url entries (convenience function - mostly so that you can
-	// use Netflix CDN list from https://openconnect.netflix.com/mobiledeliverydomains.txt)
-	for _, v := range blocklistAAAAFlag {
-		if n, err := util.URLReader(v, block.MakeBlockListReaderf(config.BlockList, dns.TypeAAAA)); err != nil {
-			log.Fatal(err)
-		} else {
-			config.BlockList.Sources.BlocklistAAAAEntries = append(config.BlockList.Sources.BlocklistAAAAEntries, block.BlockListSourceEntry{v, n})
-		}
-	}
-
-	// Get blocklist from file/url entries
-	for _, v := range blocklistHostsFlag {
-		if n, err := util.URLReader(v, block.MakeBlockListHostsReaderf(config.BlockList)); err != nil {
-			log.Fatal(err)
-		} else {
-			config.BlockList.Sources.BlocklistHostsEntries = append(config.BlockList.Sources.BlocklistHostsEntries, block.BlockListSourceEntry{v, n})
-		}
-	}
-
-	// Delete entries last (allows us to delete specific entries from blocklist/BlocklistHosts
-	for _, v := range blockDeleteFlag {
-		n := config.BlockList.Delete(v)
-		config.BlockList.Sources.BlockDeleteEntries = append(config.BlockList.Sources.BlockDeleteEntries, v)
-		log.Printf("BlockList Delete: %s (%d records)", v, n)
-	}
-
-	// Get ACL
-	for _, v := range aclFlag {
-		_, cidr, err := net.ParseCIDR(v)
-		if err != nil {
-			log.Fatalf("ACL Error (%s): %s", v, err)
-		}
-		config.Acl = append(config.Acl, *cidr)
-	}
-
-	// DNS64
-	if *dns64Flag {
-		config.Dns64 = true
-		if *dns64PrefixFlag != "" {
-			_, ipv6Net, err := net.ParseCIDR(*dns64PrefixFlag)
-			if err != nil {
-				log.Fatalf("Dns64 Prefix Error (%s): %s", *dns64PrefixFlag, err)
-			}
-			ones, bits := ipv6Net.Mask.Size()
-			if ones != 96 || bits != 128 {
-				log.Fatalf("Dns64 Prefix Error (%s): Invalid prefix", *dns64PrefixFlag)
-			}
-			config.Dns64Prefix = *ipv6Net
-		}
-	}
-
-	// API
-	if *apiFlag {
-		config.Api = true
-		if *apiBindFlag != "" {
-			config.ApiBind = *apiBindFlag
-		}
-	}
-
-	// Set defaults if necessary
-
-	if len(config.ListenAddr) == 0 {
-		addrs, err := util.ParseAddr("lo0", 8053)
-		if err != nil {
-			log.Fatalf("No valid listen addrs: %s", err)
-		}
-		config.ListenAddr = addrs
-	}
-
-	if len(config.Upstream) == 0 {
-		config.Upstream = []string{"1.1.1.1:53", "1.0.0.1:53"}
-	}
+	fmt.Printf("%+v\n", proxy_config)
 
 	// Start listeners
-	for _, listenAddr := range config.ListenAddr {
+	for _, listenAddr := range proxy_config.ListenAddr {
 
 		net_udp, net_tcp := "udp", "tcp"
 
@@ -262,28 +86,28 @@ func main() {
 	}
 
 	// Handle requests
-	dns.HandleFunc(".", proxy.MakeHandler(config))
+	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
 
 	// Flush cache
 	go func() {
 		for {
-			total, expired := config.Cache.Flush()
+			total, expired := proxy_config.Cache.Flush()
 			log.Printf("Cache: %d/%d (total/expired)", total, expired)
 			time.Sleep(time.Second * 30)
 		}
 	}()
 
 	// Start API
-	if config.Api {
-		go api.MakeApiHandler(config)()
+	if proxy_config.Api {
+		go api.MakeApiHandler(proxy_config)()
 	}
 
-	log.Printf("Config: %+v", config)
-	log.Printf("Blocklist Sources: %+v", config.BlockList.Sources)
-	log.Printf("Started server: %s", strings.Join(config.ListenAddr, " "))
-	log.Printf("Upstream: %s", strings.Join(config.Upstream, " "))
-	log.Printf("Blocklist: %d entries", config.BlockList.Count())
-	log.Printf("ACL: %s", strings.Join(AclToString(config.Acl), " "))
+	log.Printf("proxy_config: %+v", proxy_config)
+	log.Printf("Blocklist Sources: %+v", proxy_config.BlockList.Sources)
+	log.Printf("Started server: %s", strings.Join(proxy_config.ListenAddr, " "))
+	log.Printf("Upstream: %s", strings.Join(proxy_config.Upstream, " "))
+	log.Printf("Blocklist: %d entries", proxy_config.BlockList.Count())
+	log.Printf("ACL: %s", strings.Join(AclToString(proxy_config.Acl), " "))
 
 	// Wait
 	select {}
