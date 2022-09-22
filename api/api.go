@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
+	"github.com/lpar/gzipped"
 	"github.com/paulc/dinosaur/config"
 )
 
@@ -73,10 +74,10 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 		router.HandleFunc("/log", makeLogHandler(config.StatsHandler))
 
 		// Static files
-		router.PathPrefix("/static/").Handler(http.FileServer(http.FS(static)))
+		router.PathPrefix("/static/").Handler(gzipped.FileServer(http.FS(static)))
 
 		// For testing provide access to FS
-		router.PathPrefix("/test/").Handler(http.StripPrefix("/test/", http.FileServer(http.Dir("./api/static"))))
+		router.PathPrefix("/test/").Handler(http.StripPrefix("/test/", gzipped.FileServer(http.Dir("./api/static"))))
 
 		log.Printf("Starting API Listener: %s", config.ApiBind)
 

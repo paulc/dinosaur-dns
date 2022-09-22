@@ -3,8 +3,10 @@ module github.com/paulc/dinosaur
 go 1.18
 
 require (
+	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/rpc v1.2.0 // indirect
+	github.com/lpar/gzipped v1.1.0 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985 // indirect
