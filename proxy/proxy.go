@@ -157,8 +157,18 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		defer w.Close()
 
 		clientAddr := w.RemoteAddr().String()
-		clientHost, _, err := net.SplitHostPort(clientAddr)
 
+		// Stats
+		startTime := time.Now()
+		logItem := &stats.ConnectionLog{Timestamp: startTime, Client: clientAddr}
+
+		defer func() {
+			logItem.QueryTime = time.Now().Sub(startTime)
+			config.StatsHandler.Add(logItem)
+		}()
+
+		// Get the client IP
+		clientHost, _, err := net.SplitHostPort(clientAddr)
 		if err != nil {
 			log.Printf("Connection: %s [client address error]", clientHost)
 			return
@@ -172,6 +182,8 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			return
 		}
 
+		logItem.Acl = true
+
 		if len(q.Question) != 1 {
 			log.Printf("Connection: %s [invalid question]", clientHost)
 			return
@@ -181,14 +193,14 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		qname := dns.CanonicalName(q.Question[0].Name)
 		qtype := q.Question[0].Qtype
 
-		statsItem := stats.StatsItem{Timestamp: time.Now(), Client: clientAddr, Qname: qname, Qtype: dns.TypeToString[qtype]}
-		defer config.StatsHandler.Add(&statsItem)
+		logItem.Qname = qname
+		logItem.Qtype = dns.TypeToString[qtype]
 
 		// Check blocklist
 		if config.BlockList.MatchQ(qname, qtype) {
 			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
-			statsItem.Blocked = true
+			logItem.Blocked = true
 			return
 		}
 
@@ -197,7 +209,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		if err != nil {
 			log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
-			statsItem.Cached = true
+			logItem.Error = true
 			return
 		}
 
@@ -210,7 +222,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			if err != nil {
 				log.Printf("DNS64: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
-				statsItem.Error = true
+				logItem.Error = true
 				return
 			}
 			// Rewrite response
@@ -234,8 +246,9 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			} else {
 				log.Printf("Connection: %s <%s %s> [dns64 ok]", clientHost, qname, dns.TypeToString[qtype])
 			}
+			logItem.Rcode = dns64_out.Rcode
+			logItem.Cached = cached
 			w.WriteMsg(dns64_out)
-			statsItem.Cached = cached
 			return
 		}
 
@@ -245,7 +258,8 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		} else {
 			log.Printf("Connection: %s <%s %s> [ok]", clientHost, qname, dns.TypeToString[qtype])
 		}
-		statsItem.Cached = cached
+		logItem.Rcode = out.Rcode
+		logItem.Cached = cached
 		w.WriteMsg(out)
 	}
 }

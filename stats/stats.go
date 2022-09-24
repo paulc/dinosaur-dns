@@ -5,60 +5,72 @@ import (
 	"time"
 )
 
-type StatsItem struct {
+type ConnectionLog struct {
 	Timestamp time.Time
 	Client    string
 	Qname     string
 	Qtype     string
+	Rcode     int
+	QueryTime time.Duration
+	Acl       bool
 	Blocked   bool
 	Cached    bool
 	Error     bool
 }
 
-func (i StatsItem) MarshalJSON() ([]byte, error) {
+func (c ConnectionLog) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Timestamp string `json:"timestamp"`
-		Client    string `json:"client"`
-		Qname     string `json:"qname"`
-		Qtype     string `json:"qtype"`
-		Blocked   bool   `json:"blocked"`
-		Cached    bool   `json:"cached"`
-		Error     bool   `json:"error"`
+		Timestamp string  `json:"timestamp"`
+		Client    string  `json:"client"`
+		Qname     string  `json:"qname"`
+		Qtype     string  `json:"qtype"`
+		Rcode     int     `json:"rcode"`
+		QueryTime float32 `json:"querytime"`
+		Acl       bool    `json:"acl"`
+		Blocked   bool    `json:"blocked"`
+		Cached    bool    `json:"cached"`
+		Error     bool    `json:"error"`
 	}{
-		i.Timestamp.Format(time.RFC3339),
-		i.Client,
-		i.Qname,
-		i.Qtype,
-		i.Blocked,
-		i.Cached,
-		i.Error,
+		c.Timestamp.Format(time.RFC3339),
+		c.Client,
+		c.Qname,
+		c.Qtype,
+		c.Rcode,
+		float32(c.QueryTime.Microseconds()) / float32(1000000),
+		c.Acl,
+		c.Blocked,
+		c.Cached,
+		c.Error,
 	})
 }
 
 type StatsHandler struct {
-	buffer *CircularBuffer[StatsItem]
+	connections *CircularBuffer[ConnectionLog]
 }
 
 func NewStatsHandler(bufferLength int) *StatsHandler {
-	return &StatsHandler{buffer: NewCircularBuffer[StatsItem](bufferLength)}
-}
-
-func (s *StatsHandler) Add(i *StatsItem) {
-	s.buffer.Insert(*i)
-}
-
-func (s *StatsHandler) Tail(n int) []StatsItem {
-	return s.buffer.Tail(n)
-}
-
-func (s *StatsHandler) MakeLogChannel(id string, c chan string) {
-	hookf := func(i StatsItem) {
-		b, _ := json.Marshal(i)
-		c <- string(b)
+	return &StatsHandler{
+		connections: NewCircularBuffer[ConnectionLog](bufferLength),
 	}
-	s.buffer.AddHook(id, hookf)
+}
+
+func (s *StatsHandler) Add(c *ConnectionLog) {
+	// Insert into log buffer
+	s.connections.Insert(*c)
+}
+
+func (s *StatsHandler) Tail(n int) []ConnectionLog {
+	return s.connections.Tail(n)
+}
+
+func (s *StatsHandler) MakeLogChannel(id string, ch chan string) {
+	hookf := func(c ConnectionLog) {
+		b, _ := json.Marshal(c)
+		ch <- string(b)
+	}
+	s.connections.AddHook(id, hookf)
 }
 
 func (s *StatsHandler) CloseLogChannel(id string) {
-	s.buffer.DeleteHook(id)
+	s.connections.DeleteHook(id)
 }

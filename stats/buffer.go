@@ -93,3 +93,53 @@ func (b *CircularBuffer[T]) Tail(count int) (res []T) {
 	}
 	return
 }
+
+func (b *CircularBuffer[T]) TailFilter(count int, f func(T) bool) (res []T) {
+	b.Lock()
+	defer b.Unlock()
+	// b.position is insertion point so need to step backwards from b.position - 1
+	for i := 1; i <= b.length; i++ {
+		pos := b.position - i
+		if pos < 0 {
+			pos = b.length + pos
+		}
+		if f(b.buffer[pos]) {
+			res = append(res, b.buffer[pos])
+		}
+		if count > 0 && len(res) == count {
+			break
+		}
+	}
+	return
+}
+
+func (b *CircularBuffer[T]) TailBetween(count int, startf func(T) bool, endf func(T) bool, itemf func(T) bool) (res []T) {
+	b.Lock()
+	defer b.Unlock()
+	start := (startf == nil)
+	for i := 1; i <= b.length; i++ {
+		pos := b.position - i
+		if pos < 0 {
+			pos = b.length + pos
+		}
+		// Check for end of range
+		if endf != nil && endf(b.buffer[pos]) {
+			break
+		}
+		// Check for start of range
+		if !start {
+			start = startf(b.buffer[pos])
+		}
+		// Add to buffer if in range and itemf matches
+		if start {
+			if itemf == nil || itemf(b.buffer[pos]) {
+				res = append(res, b.buffer[pos])
+			}
+		}
+		// Check max count
+		if count > 0 && len(res) == count {
+			break
+		}
+	}
+	return
+}

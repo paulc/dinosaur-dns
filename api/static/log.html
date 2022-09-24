@@ -28,16 +28,20 @@
         <tr>
           <th style="width: 25%; text-align: left">Time:</th>
           <th style="width: 15%; text-align: left">Client:</th>
-          <th style="width: 35%; text-align: left">Qname:</th>
-          <th style="width: 10%; text-align: left">Qtype:</th>
-          <th style="width: 15%; text-align: left">Status:</th>
+          <th style="width: 30%; text-align: left">Qname:</th>
+          <th style="width: 5%; text-align: left">Qtype:</th>
+          <th style="width: 5%; text-align: left">Rcode:</th>
+          <th style="width: 10%; text-align: left">Status:</th>
+          <th style="width: 10%; text-align: left">Query Time:</th>
         </tr>
         <tr style="border: 5px solid">
           <td><input style="width: 80%" x-model="filterOptions.date" x-on:keydown="updateFilter()"></td>
           <td><input style="width: 80%" x-model="filterOptions.client" x-on:keydown="updateFilter()"></td>
           <td><input style="width: 80%" x-model="filterOptions.qname" x-on:keydown="updateFilter()"></td>
           <td><input style="width: 80%" x-model="filterOptions.qtype" x-on:keydown="updateFilter()"></td>
+          <td><input style="width: 80%" x-model="filterOptions.rcode" x-on:keydown="updateFilter()"></td>
           <td><input style="width: 80%" x-model="filterOptions.status" x-on:keydown="updateFilter()"></td>
+          <td></td>
         </tr>
       </thead>
       <tbody>
@@ -47,7 +51,9 @@
             <td x-text="i.client"></td>
             <td><span x-text="i.qname"></span><span style="cursor: pointer" x-on:click="(e) => api.call('api.BlockListAdd',{entries:[i.qname]})">&nbsp;🚫</span></td>
             <td x-text="i.qtype"></td>
+            <td x-text="rcodeToString[i.rcode]"></td>
             <td x-text="formatStatus(i)"></td>
+            <td x-text="i.querytime"></td>
           </tr>
         </template>
       </tbody>
