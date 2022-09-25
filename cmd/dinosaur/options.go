@@ -21,6 +21,8 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
 	var apiFlag = flag.Bool("api", false, "Enable API (default: false)")
 	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
+	var refreshFlag = flag.Bool("refresh", false, "Auto refresh blocklist (default: false)")
+	var refreshIntervalFlag = flag.String("refresh-interval", "", "Blocklist refresh interval (default: 24hrs)")
 
 	var listenFlag util.MultiFlag
 	flag.Var(&listenFlag, "listen", "Listen address/interface (default: lo0:8053)")
@@ -145,6 +147,14 @@ func GetUserConfig() (*config.UserConfig, error) {
 	}
 	if *apiBindFlag != "" {
 		user_config.ApiBind = *apiBindFlag
+	}
+
+	// Blocklist refresh
+	if *refreshFlag {
+		user_config.Refresh = true
+	}
+	if *refreshIntervalFlag != "" {
+		user_config.RefreshInterval = *refreshIntervalFlag
 	}
 
 	// Set defaults if necessary

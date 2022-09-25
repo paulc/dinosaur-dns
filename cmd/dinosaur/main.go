@@ -10,6 +10,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/api"
+	"github.com/paulc/dinosaur/block"
 	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
 )
@@ -88,14 +89,32 @@ func main() {
 	// Handle requests
 	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
 
-	// Flush cache
+	// Start flush cache goroutine
 	go func() {
 		for {
+			time.Sleep(time.Second * 30)
 			total, expired := proxy_config.Cache.Flush()
 			log.Printf("Cache: %d/%d (total/expired)", total, expired)
-			time.Sleep(time.Second * 30)
 		}
 	}()
+
+	// Start blocklist update goroutine if enabled
+	if proxy_config.Refresh {
+		go func() {
+			for {
+				time.Sleep(proxy_config.RefreshInterval)
+				newBL := block.NewBlockList()
+				if err := proxy_config.UserConfig.UpdateBlockList(newBL); err != nil {
+					log.Printf("Error updating blocklist: %s", err)
+				} else {
+					proxy_config.Lock()
+					proxy_config.BlockList = newBL
+					proxy_config.Unlock()
+					log.Printf("Updated Blocklist: %d entries", proxy_config.BlockList.Count())
+				}
+			}
+		}()
+	}
 
 	// Start API
 	if proxy_config.Api {

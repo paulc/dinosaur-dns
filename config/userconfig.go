@@ -5,6 +5,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/block"
@@ -26,6 +27,8 @@ type UserConfig struct {
 	Dns64Prefix        string   `json:"dns64-prefix"`
 	Api                bool     `json:"api"`
 	ApiBind            string   `json:"api-bind"`
+	Refresh            bool     `json:"refresh"`
+	RefreshInterval    string   `json:"refresh-interval"`
 }
 
 func NewUserConfig() *UserConfig {
@@ -111,15 +114,26 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	}
 
 	// API
-	if user_config.Api {
-		config.Api = true
-		if user_config.ApiBind != "" {
-			config.ApiBind = user_config.ApiBind
-		}
+	config.Api = user_config.Api
+	if user_config.ApiBind != "" {
+		config.ApiBind = user_config.ApiBind
 	}
 
-	config.UserConfig = user_config
+	// Refresh Blocklist
+	config.Refresh = user_config.Refresh
+	if user_config.RefreshInterval != "" {
+		duration, err := time.ParseDuration(user_config.RefreshInterval)
+		if err != nil {
+			return err
+		}
+		if duration < time.Second {
+			return fmt.Errorf("Invalid duration: %s", duration)
+		}
+		config.RefreshInterval = duration
+	}
 
+	// ADd reference to UserConfig
+	config.UserConfig = user_config
 	return nil
 }
 

@@ -177,13 +177,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// ParseIP doesnt handle IPv6 link local addresses correctly (...%ifname) so we strip interface
 		clientIP := net.ParseIP(regexp.MustCompile(`%.+$`).ReplaceAllString(clientHost, ""))
 
-		if !checkAcl(config.Acl, clientIP) {
-			log.Printf("Connection: %s [refused]", clientHost)
-			return
-		}
-
-		logItem.Acl = true
-
+		// DOnt handle queries with more than one question
 		if len(q.Question) != 1 {
 			log.Printf("Connection: %s [invalid question]", clientHost)
 			return
@@ -195,6 +189,14 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		logItem.Qname = qname
 		logItem.Qtype = dns.TypeToString[qtype]
+
+		// Check ACL
+		if !checkAcl(config.Acl, clientIP) {
+			log.Printf("Connection: %s [refused]", clientHost)
+			return
+		}
+
+		logItem.Acl = true
 
 		// Check blocklist
 		if config.BlockList.MatchQ(qname, qtype) {
