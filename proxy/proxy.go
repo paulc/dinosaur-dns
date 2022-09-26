@@ -102,7 +102,7 @@ func checkAcl(acl []net.IPNet, client net.IP) bool {
 
 }
 
-func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dns.Msg, err error, cached bool) {
+func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, cached bool) {
 
 	// Check cache
 	out, found := config.Cache.Get(q)
@@ -123,7 +123,9 @@ func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dn
 		if err == nil {
 			// If this is the first upstream clear the error count
 			if i == 0 {
+				config.Lock()
 				config.UpstreamErr = 0
+				config.Unlock()
 			}
 			// Cache response
 			config.Cache.Add(out)
@@ -136,7 +138,10 @@ func resolve(config *config.ProxyConfig, clientHost string, q *dns.Msg) (out *dn
 			config.UpstreamErr += 1
 			if config.UpstreamErr > 3 {
 				// Demote upstream
+				config.Lock()
 				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
+				config.UpstreamErr = 0
+				config.Unlock()
 				log.Printf("Error threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
 			}
 
@@ -177,7 +182,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// ParseIP doesnt handle IPv6 link local addresses correctly (...%ifname) so we strip interface
 		clientIP := net.ParseIP(regexp.MustCompile(`%.+$`).ReplaceAllString(clientHost, ""))
 
-		// DOnt handle queries with more than one question
+		// Dont handle queries with more than one question
 		if len(q.Question) != 1 {
 			log.Printf("Connection: %s [invalid question]", clientHost)
 			return
@@ -207,7 +212,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		}
 
 		// Resolve address
-		out, err, cached := resolve(config, clientHost, q)
+		out, err, cached := resolve(config, q)
 		if err != nil {
 			log.Printf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
@@ -220,7 +225,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 && clientIP.To4() == nil {
 			// Try DNS64 lookup
 			q.Question[0].Qtype = dns.TypeA
-			dns64_out, err, cached := resolve(config, clientHost, q)
+			dns64_out, err, cached := resolve(config, q)
 			if err != nil {
 				log.Printf("DNS64: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
