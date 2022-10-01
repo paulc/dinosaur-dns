@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"testing"
 
@@ -56,7 +55,7 @@ func (t *TestResponseWriter) TsigTimersOnly(bool) {
 func (t *TestResponseWriter) Hijack() {
 }
 
-func TestHandler(T *testing.T) {
+func TestHandlerSimple(t *testing.T) {
 
 	c := config.NewProxyConfig()
 	c.Upstream = []string{"1.1.1.1:53"}
@@ -66,6 +65,5 @@ func TestHandler(T *testing.T) {
 	q := createQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	fmt.Printf(">>> %s\n", rw.outmsg)
-
+	checkResponse(t, rw.outmsg, "127.0.0.1")
 }

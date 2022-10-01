@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/paulc/dinosaur/stats"
+	"github.com/paulc/dinosaur/statshandler"
 )
 
-func makeLogHandler(statsHandler *stats.StatsHandler) http.HandlerFunc {
+func makeLogHandler(statsHandler *statshandler.StatsHandler) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 

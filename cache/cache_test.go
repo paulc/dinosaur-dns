@@ -45,7 +45,7 @@ func TestAdd(t *testing.T) {
 		timeNow = time.Now
 	}()
 
-	cache := NewDNSCache()
+	cache := New()
 
 	// Insert entries
 	for i := 0; i < 100; i++ {
@@ -98,7 +98,7 @@ func TestExpire(t *testing.T) {
 		timeNow = time.Now
 	}()
 
-	cache := NewDNSCache()
+	cache := New()
 
 	// Insert entries
 	for i := 0; i < 100; i++ {
@@ -133,7 +133,7 @@ func TestExpire(t *testing.T) {
 
 func TestConcurrent(t *testing.T) {
 
-	cache := NewDNSCache()
+	cache := New()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
@@ -166,7 +166,7 @@ func TestConcurrent(t *testing.T) {
 
 func TestAddRR(t *testing.T) {
 
-	cache := NewDNSCache()
+	cache := New()
 	err := cache.AddRR("abc.def.com 60 A 1.2.3.4", true)
 	if err != nil {
 		t.Error(err)

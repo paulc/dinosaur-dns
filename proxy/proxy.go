@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"regexp"
@@ -13,7 +12,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/stats"
+	"github.com/paulc/dinosaur/statshandler"
 )
 
 func matchDomain(domains []string, name string) bool {
@@ -104,6 +103,8 @@ func checkAcl(acl []net.IPNet, client net.IP) bool {
 
 func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, cached bool) {
 
+	log := config.Log
+
 	// Check cache
 	out, found := config.Cache.Get(q)
 	if found {
@@ -161,11 +162,13 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// Always close connection
 		defer w.Close()
 
+		log := config.Log
+
 		clientAddr := w.RemoteAddr().String()
 
 		// Stats
 		startTime := time.Now()
-		logItem := &stats.ConnectionLog{Timestamp: startTime, Client: clientAddr}
+		logItem := &statshandler.ConnectionLog{Timestamp: startTime, Client: clientAddr}
 
 		defer func() {
 			logItem.QueryTime = time.Now().Sub(startTime)

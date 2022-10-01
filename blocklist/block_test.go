@@ -1,4 +1,4 @@
-package block
+package blocklist
 
 import (
 	"testing"
@@ -22,7 +22,7 @@ func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, exp
 }
 
 func TestBlockCount(t *testing.T) {
-	bl := NewBlockList()
+	bl := New()
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
@@ -33,7 +33,7 @@ func TestBlockCount(t *testing.T) {
 }
 
 func TestBlockDelete(t *testing.T) {
-	bl := NewBlockList()
+	bl := New()
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
@@ -52,7 +52,7 @@ func TestBlockDelete(t *testing.T) {
 }
 
 func TestBlockDeleteTree(t *testing.T) {
-	bl := NewBlockList()
+	bl := New()
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
@@ -63,7 +63,7 @@ func TestBlockDeleteTree(t *testing.T) {
 }
 
 func TestBlockAny(t *testing.T) {
-	bl := NewBlockList()
+	bl := New()
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
@@ -74,7 +74,7 @@ func TestBlockAny(t *testing.T) {
 }
 
 func TestBlockAAAA(t *testing.T) {
-	bl := NewBlockList()
+	bl := New()
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeAAAA)
 	}
@@ -85,7 +85,7 @@ func TestBlockAAAA(t *testing.T) {
 }
 
 func TestBlockRootAAAA(t *testing.T) {
-	bl := NewBlockList()
+	bl := New()
 	for _, v := range []string{"."} {
 		bl.Add(v, dns.TypeAAAA)
 	}

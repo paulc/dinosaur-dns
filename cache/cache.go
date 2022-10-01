@@ -45,7 +45,7 @@ type DNSCache struct {
 	Cache map[DNSCacheKey]DNSCacheItem
 }
 
-func NewDNSCache() *DNSCache {
+func New() *DNSCache {
 	return &DNSCache{Cache: make(map[DNSCacheKey]DNSCacheItem)}
 }
 
@@ -135,7 +135,6 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 
 	if !entry.Permanent && timeNow().After(entry.Expires) {
 		// Expired - flush key
-		// log.Printf("Cache: %s expired", entry)
 		delete(c.Cache, key)
 		return nil, false
 	}
@@ -186,7 +185,6 @@ func (c *DNSCache) Flush() (total, expired int) {
 	for k, v := range c.Cache {
 		total++
 		if !v.Permanent && now.After(v.Expires) {
-			// log.Printf("Cache: %s expired", k)
 			delete(c.Cache, k)
 			expired++
 		}

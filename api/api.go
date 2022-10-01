@@ -3,7 +3,6 @@ package api
 import (
 	"embed"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -15,13 +14,14 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/lpar/gzipped"
 	"github.com/paulc/dinosaur/config"
+	"github.com/paulc/dinosaur/logger"
 )
 
 //go:embed static/*
 var static embed.FS
 
 // Bind to either Internet or UNIX Domain socket
-func bindListener(bindAddress string) (listener net.Listener, err error) {
+func bindListener(bindAddress string, log *logger.Logger) (listener net.Listener, err error) {
 
 	if bindAddress[0] == '/' {
 
@@ -50,8 +50,10 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 
 	return func() {
 
+		log := config.Log
+
 		// Bind API Listener
-		listener, err := bindListener(config.ApiBind)
+		listener, err := bindListener(config.ApiBind, log)
 		if err != nil {
 			log.Fatalf("API listener could not bind [%s]: %s", config.ApiBind, err)
 		}

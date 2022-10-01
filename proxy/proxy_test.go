@@ -13,6 +13,21 @@ func createQuery(qname string, qtype string) *dns.Msg {
 	return msg
 }
 
+func checkResponse(t *testing.T, msg *dns.Msg, expected string) {
+	if len(msg.Answer) == 0 {
+		t.Errorf("Invalid DNS Response")
+		return
+	}
+	rrtype := msg.Answer[0].Header().Rrtype
+	if rrtype == dns.TypeA {
+		if msg.Answer[0].(*dns.A).A.String() != expected {
+			t.Errorf("Invalid DNS response: %s", msg.Answer[0].(*dns.A).A)
+		}
+	} else {
+		t.Errorf("Unexpected RR type: %s", dns.TypeToString[rrtype])
+	}
+}
+
 func TestDnsRequest(t *testing.T) {
 
 	out, err := dnsRequest(createQuery("127.0.0.1.nip.io.", "A"), "1.1.1.1:53")
@@ -20,13 +35,7 @@ func TestDnsRequest(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if len(out.Answer) == 0 {
-		t.Errorf("Invalid DNS Response")
-		return
-	}
-	if out.Answer[0].(*dns.A).A.String() != "127.0.0.1" {
-		t.Errorf("Invalid DNS response: %s", out.Answer[0].(*dns.A).A)
-	}
+	checkResponse(t, out, "127.0.0.1")
 }
 
 func TestDohRequest(t *testing.T) {
@@ -36,13 +45,7 @@ func TestDohRequest(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if len(out.Answer) == 0 {
-		t.Errorf("Invalid DNS Response")
-		return
-	}
-	if out.Answer[0].(*dns.A).A.String() != "127.0.0.1" {
-		t.Errorf("Invalid DNS response: %s", out.Answer[0].(*dns.A).A)
-	}
+	checkResponse(t, out, "127.0.0.1")
 }
 
 func TestResolve(t *testing.T) {
@@ -55,14 +58,8 @@ func TestResolve(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if len(out.Answer) == 0 {
-		t.Errorf("Invalid DNS Response")
-		return
-	}
-	if out.Answer[0].(*dns.A).A.String() != "127.0.0.1" {
-		t.Errorf("Invalid DNS response: %s", out.Answer[0].(*dns.A).A)
-		return
-	}
+	checkResponse(t, out, "127.0.0.1")
+
 	if cached == true {
 		t.Errorf("Error: cached")
 		return
@@ -83,14 +80,9 @@ func TestResolveCached(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(out.Answer) == 0 {
-		t.Errorf("Invalid DNS Response")
-		return
-	}
-	if out.Answer[0].(*dns.A).A.String() != "127.0.0.1" {
-		t.Errorf("Invalid DNS response: %s", out.Answer[0].(*dns.A).A)
-		return
-	}
+
+	checkResponse(t, out, "127.0.0.1")
+
 	if cached != true {
 		t.Errorf("Error: not cached")
 		return
@@ -106,14 +98,9 @@ func TestResolveInvalidUpstream(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(out.Answer) == 0 {
-		t.Errorf("Invalid DNS Response")
-		return
-	}
-	if out.Answer[0].(*dns.A).A.String() != "127.0.0.1" {
-		t.Errorf("Invalid DNS response: %s", out.Answer[0].(*dns.A).A)
-		return
-	}
+
+	checkResponse(t, out, "127.0.0.1")
+
 	if cached == true {
 		t.Errorf("Error: cached")
 		return

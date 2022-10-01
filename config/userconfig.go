@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/block"
+	"github.com/paulc/dinosaur/blocklist"
+	"github.com/paulc/dinosaur/logger"
 	"github.com/paulc/dinosaur/util"
 )
 
@@ -29,6 +30,9 @@ type UserConfig struct {
 	ApiBind            string   `json:"api-bind"`
 	Refresh            bool     `json:"refresh"`
 	RefreshInterval    string   `json:"refresh-interval"`
+	Debug              bool     `json:"debug"`
+	Syslog             bool     `json:"syslog"`
+	Discard            bool     `json:"discard"`
 }
 
 func NewUserConfig() *UserConfig {
@@ -132,12 +136,23 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		config.RefreshInterval = duration
 	}
 
-	// ADd reference to UserConfig
+	// Logging
+	if user_config.Discard {
+		config.Log = logger.New(logger.NewDiscard(false))
+	} else {
+		if user_config.Syslog {
+			config.Log = logger.New(logger.NewSyslog(user_config.Debug))
+		} else {
+			config.Log = logger.New(logger.NewStderr(user_config.Debug))
+		}
+	}
+
+	// Add reference to UserConfig
 	config.UserConfig = user_config
 	return nil
 }
 
-func (user_config *UserConfig) UpdateBlockList(bl *block.BlockList) error {
+func (user_config *UserConfig) UpdateBlockList(bl *blocklist.BlockList) error {
 
 	// Block entries
 	for _, v := range user_config.Block {
@@ -148,21 +163,21 @@ func (user_config *UserConfig) UpdateBlockList(bl *block.BlockList) error {
 
 	// Blocklist file/url
 	for _, v := range user_config.Blocklist {
-		if _, err := util.URLReader(v, block.MakeBlockListReaderf(bl, dns.TypeANY)); err != nil {
+		if _, err := util.URLReader(v, blocklist.MakeBlockListReaderf(bl, dns.TypeANY)); err != nil {
 			return err
 		}
 	}
 
 	// Blocklist file/url (AAAA)
 	for _, v := range user_config.BlocklistAAAA {
-		if _, err := util.URLReader(v, block.MakeBlockListReaderf(bl, dns.TypeAAAA)); err != nil {
+		if _, err := util.URLReader(v, blocklist.MakeBlockListReaderf(bl, dns.TypeAAAA)); err != nil {
 			return err
 		}
 	}
 
 	// Blocklist hosts file
 	for _, v := range user_config.BlocklistFromHosts {
-		if _, err := util.URLReader(v, block.MakeBlockListHostsReaderf(bl)); err != nil {
+		if _, err := util.URLReader(v, blocklist.MakeBlockListHostsReaderf(bl)); err != nil {
 			return err
 		}
 	}

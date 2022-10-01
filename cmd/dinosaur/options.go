@@ -23,6 +23,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
 	var refreshFlag = flag.Bool("refresh", false, "Auto refresh blocklist (default: false)")
 	var refreshIntervalFlag = flag.String("refresh-interval", "", "Blocklist refresh interval (default: 24hrs)")
+	var debugFlag = flag.Bool("debug", false, "Discard logs (default: false)")
+	var syslogFlag = flag.Bool("syslog", false, "Use syslog (default: false)")
+	var discardFlag = flag.Bool("discard", false, "Debug logging (default: false)")
 
 	var listenFlag util.MultiFlag
 	flag.Var(&listenFlag, "listen", "Listen address/interface (default: lo0:8053)")
@@ -133,35 +136,32 @@ func GetUserConfig() (*config.UserConfig, error) {
 	}
 
 	// DNS64
-	if *dns64Flag {
-		user_config.Dns64 = true
-	}
-
+	user_config.Dns64 = *dns64Flag
 	if *dns64PrefixFlag != "" {
 		user_config.Dns64Prefix = *dns64PrefixFlag
 	}
 
 	// API
-	if *apiFlag {
-		user_config.Api = true
-	}
+	user_config.Api = *apiFlag
 	if *apiBindFlag != "" {
 		user_config.ApiBind = *apiBindFlag
 	}
 
 	// Blocklist refresh
-	if *refreshFlag {
-		user_config.Refresh = true
-	}
+	user_config.Refresh = *refreshFlag
 	if *refreshIntervalFlag != "" {
 		user_config.RefreshInterval = *refreshIntervalFlag
 	}
+
+	// Logging
+	user_config.Debug = *debugFlag
+	user_config.Syslog = *syslogFlag
+	user_config.Discard = *discardFlag
 
 	// Set defaults if necessary
 	if len(user_config.Listen) == 0 {
 		user_config.Listen = append(user_config.Listen, "lo0:8053")
 	}
-
 	if len(user_config.Upstream) == 0 {
 		user_config.Upstream = append(user_config.Upstream, "https://cloudflare-dns.com/dns-query")
 	}

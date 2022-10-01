@@ -1,4 +1,4 @@
-package stats
+package statshandler
 
 import (
 	"encoding/json"
@@ -48,7 +48,7 @@ type StatsHandler struct {
 	connections *CircularBuffer[ConnectionLog]
 }
 
-func NewStatsHandler(bufferLength int) *StatsHandler {
+func New(bufferLength int) *StatsHandler {
 	return &StatsHandler{
 		connections: NewCircularBuffer[ConnectionLog](bufferLength),
 	}

@@ -1,4 +1,4 @@
-package block
+package blocklist
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ type level struct {
 	Children map[string]*level
 }
 
-func NewBlockList() *BlockList {
+func New() *BlockList {
 	return &BlockList{Root: NewLevel()}
 }
 

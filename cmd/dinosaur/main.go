@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/api"
-	"github.com/paulc/dinosaur/block"
+	"github.com/paulc/dinosaur/blocklist"
 	"github.com/paulc/dinosaur/config"
 	"github.com/paulc/dinosaur/proxy"
 )
@@ -39,14 +38,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	json_config, _ := json.MarshalIndent(user_config, "", "  ")
-	fmt.Printf("%s\n", string(json_config))
-
 	proxy_config := config.NewProxyConfig()
 	if err := user_config.GetProxyConfig(proxy_config); err != nil {
 		log.Fatal("Config Error: ", err)
 	}
-	fmt.Printf("%+v\n", proxy_config)
+
+	// We have now setup Logger so use this
+	log := proxy_config.Log
+
+	json_config, _ := json.MarshalIndent(user_config, "", "  ")
+	log.Debugf("%s\n", string(json_config))
 
 	// Start listeners
 	for _, listenAddr := range proxy_config.ListenAddr {
@@ -103,7 +104,7 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(proxy_config.RefreshInterval)
-				newBL := block.NewBlockList()
+				newBL := blocklist.New()
 				if err := proxy_config.UserConfig.UpdateBlockList(newBL); err != nil {
 					log.Printf("Error updating blocklist: %s", err)
 				} else {
