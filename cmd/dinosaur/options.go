@@ -136,27 +136,27 @@ func GetUserConfig() (*config.UserConfig, error) {
 	}
 
 	// DNS64
-	user_config.Dns64 = *dns64Flag
+	user_config.Dns64 = user_config.Dns64 || *dns64Flag
 	if *dns64PrefixFlag != "" {
 		user_config.Dns64Prefix = *dns64PrefixFlag
 	}
 
 	// API
-	user_config.Api = *apiFlag
+	user_config.Api = user_config.Api || *apiFlag
 	if *apiBindFlag != "" {
 		user_config.ApiBind = *apiBindFlag
 	}
 
 	// Blocklist refresh
-	user_config.Refresh = *refreshFlag
+	user_config.Refresh = user_config.Refresh || *refreshFlag
 	if *refreshIntervalFlag != "" {
 		user_config.RefreshInterval = *refreshIntervalFlag
 	}
 
 	// Logging
-	user_config.Debug = *debugFlag
-	user_config.Syslog = *syslogFlag
-	user_config.Discard = *discardFlag
+	user_config.Debug = user_config.Debug || *debugFlag
+	user_config.Syslog = user_config.Syslog || *syslogFlag
+	user_config.Discard = user_config.Discard || *discardFlag
 
 	// Set defaults if necessary
 	if len(user_config.Listen) == 0 {
