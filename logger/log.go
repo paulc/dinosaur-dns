@@ -8,6 +8,15 @@ import (
 	"path/filepath"
 )
 
+type Level int
+
+const (
+	Debug Level = iota
+	Info
+	Error
+	Fatal
+)
+
 type LogHandler struct {
 	Debug *log.Logger
 	Info  *log.Logger
@@ -53,69 +62,69 @@ func NewSyslog(debug bool) *LogHandler {
 		w, err := syslog.New(v, filepath.Base(os.Args[0]))
 		if err != nil {
 			// If we cant connect to syslog exit
-			log.Fatal("Cant connect to syslog: %s", err)
+			log.Fatalf("Cant connect to syslog: %s", err)
 		}
 		logger[i] = log.New(w, "", 0)
 	}
 
 	if !debug {
-		logger[0] = log.New(io.Discard, "DEBUG: ", log.LstdFlags|log.Lmsgprefix)
+		logger[Debug] = log.New(io.Discard, "DEBUG: ", log.LstdFlags|log.Lmsgprefix)
 	}
 
 	return &LogHandler{
-		Debug: logger[0],
-		Info:  logger[1],
-		Error: logger[2],
-		Fatal: logger[3],
+		Debug: logger[Debug],
+		Info:  logger[Info],
+		Error: logger[Error],
+		Fatal: logger[Fatal],
 	}
 }
 
 // Wrap handler to simpliy interface
 type Logger struct {
-	handler *LogHandler
+	Handler *LogHandler
 }
 
 func New(handler *LogHandler) *Logger {
-	return &Logger{handler: handler}
+	return &Logger{Handler: handler}
 }
 
 func (l *Logger) Debug(v ...any) {
-	l.handler.Debug.Print(v...)
+	l.Handler.Debug.Print(v...)
 }
 
 func (l *Logger) Debugf(format string, v ...any) {
-	l.handler.Debug.Printf(format, v...)
+	l.Handler.Debug.Printf(format, v...)
 }
 
 // Alias Print() to Info()
 func (l *Logger) Print(v ...any) {
-	l.handler.Info.Print(v...)
+	l.Handler.Info.Print(v...)
 }
 
 func (l *Logger) Printf(format string, v ...any) {
-	l.handler.Info.Printf(format, v...)
+	l.Handler.Info.Printf(format, v...)
 }
 
 func (l *Logger) Info(v ...any) {
-	l.handler.Info.Print(v...)
+	l.Handler.Info.Print(v...)
 }
 
 func (l *Logger) Infof(format string, v ...any) {
-	l.handler.Info.Printf(format, v...)
+	l.Handler.Info.Printf(format, v...)
 }
 
 func (l *Logger) Error(v ...any) {
-	l.handler.Info.Print(v...)
+	l.Handler.Error.Print(v...)
 }
 
 func (l *Logger) Errorf(format string, v ...any) {
-	l.handler.Info.Printf(format, v...)
+	l.Handler.Error.Printf(format, v...)
 }
 
 func (l *Logger) Fatal(v ...any) {
-	l.handler.Fatal.Fatal(v...)
+	l.Handler.Fatal.Fatal(v...)
 }
 
 func (l *Logger) Fatalf(format string, v ...any) {
-	l.handler.Fatal.Fatalf(format, v...)
+	l.Handler.Fatal.Fatalf(format, v...)
 }
