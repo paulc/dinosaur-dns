@@ -106,6 +106,13 @@ func (b *BlockList) Count() int {
 	return b.Root.Count()
 }
 
+func (b *BlockList) Dump() (out []string) {
+	b.Lock()
+	defer b.Unlock()
+	b.Root.Dump("", &out)
+	return
+}
+
 // Utility functions to generate reader functions for util.URLReader
 func MakeBlockListReaderf(b *BlockList, default_qtype uint16) func(line string) error {
 	return func(line string) error {
@@ -202,4 +209,13 @@ func (l *level) Count() (total int) {
 	}
 	total += len(l.Leaves)
 	return
+}
+
+func (l *level) Dump(prefix string, out *[]string) {
+	for k, v := range l.Leaves {
+		*out = append(*out, fmt.Sprintf("%s.%s:%s", k, prefix, dns.TypeToString[v]))
+	}
+	for k, v := range l.Children {
+		v.Dump(fmt.Sprintf("%s.%s", k, prefix), out)
+	}
 }

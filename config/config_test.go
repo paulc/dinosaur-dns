@@ -38,7 +38,10 @@ var json_config = `
   "refresh": true,
   "refresh-interval": "60m",
   "api": true,
-  "api-bind": "127.0.0.1:9999"
+  "api-bind": "127.0.0.1:9999",
+  "debug": true,
+  "syslog": false,
+  "discard": false
 }
 `
 

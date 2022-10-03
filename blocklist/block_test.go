@@ -1,12 +1,14 @@
 package blocklist
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/miekg/dns"
 )
 
 var BlockDomains = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com"}
+var BlockDomainsType = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com", ".:AAAA", "txt.block.com:TXT", "ns.block.com:NS"}
 
 var CheckDomainsTrue = []string{"aaa.block.com", "xxx.bbb.block.com", "XXX.DDD.CCC.BLOCK.COM"}
 var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
@@ -14,7 +16,6 @@ var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
 func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
 		result := root.MatchQ(v, qtype)
-		t.Logf("%s %s == %t", v, dns.TypeToString[qtype], result)
 		if result != expected {
 			t.Errorf("%s %s == %t (expected %t)", v, dns.TypeToString[qtype], result, expected)
 		}
@@ -29,7 +30,20 @@ func TestBlockCount(t *testing.T) {
 	if bl.Count() != len(BlockDomains) {
 		t.Errorf("root.Count() = %d (expected %d)", bl.Count(), len(BlockDomains))
 	}
-	t.Logf("root :: count = %d", bl.Count())
+}
+
+func TestBlockDump(t *testing.T) {
+	bl := New()
+	for _, v := range BlockDomainsType {
+		bl.AddEntry(v, dns.TypeANY)
+	}
+
+	dump := bl.Dump()
+	sort.Slice(dump, func(i, j int) bool { return dump[i] < dump[j] })
+
+	if len(dump) != len(BlockDomainsType) {
+		t.Errorf("len(dump) = %d (expected %d)", len(dump), len(BlockDomainsType))
+	}
 }
 
 func TestBlockDelete(t *testing.T) {
@@ -46,7 +60,6 @@ func TestBlockDelete(t *testing.T) {
 	if bl.Count() != len(BlockDomains)-1 {
 		t.Errorf("root.Count() = %d (expected %d)", bl.Count(), len(BlockDomains)-1)
 	}
-	t.Logf("root :: count = %d", bl.Count())
 	test_match(t, bl, BlockDomains[:1], dns.TypeA, false)
 	test_match(t, bl, BlockDomains[1:], dns.TypeA, true)
 }
@@ -59,7 +72,6 @@ func TestBlockDeleteTree(t *testing.T) {
 	if bl.Delete("block.com") != len(BlockDomains) {
 		t.Errorf("t.Delete(%s) error", "block.com")
 	}
-	t.Logf("root :: count = %d", bl.Count())
 }
 
 func TestBlockAny(t *testing.T) {

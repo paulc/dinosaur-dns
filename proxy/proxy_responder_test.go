@@ -2,11 +2,13 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"net"
 	"testing"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
+	"github.com/paulc/dinosaur/logger"
 )
 
 // Mock for dns.ResponseWriter
@@ -59,6 +61,7 @@ func TestHandlerSimple(t *testing.T) {
 
 	c := config.NewProxyConfig()
 	c.Upstream = []string{"1.1.1.1:53"}
+	c.Log = logger.New(logger.NewDiscard(false))
 
 	handler := MakeHandler(c)
 	rw := NewTestResponseWriter()
@@ -66,4 +69,98 @@ func TestHandlerSimple(t *testing.T) {
 	handler(rw, q)
 
 	checkResponse(t, rw.outmsg, "127.0.0.1")
+}
+
+func TestHandlerUpstreamDNS(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "1.1.1.1" ],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	q := createQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	checkResponse(t, rw.outmsg, "127.0.0.1")
+}
+
+func TestHandlerUpstreamDOH(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	q := createQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	checkResponse(t, rw.outmsg, "127.0.0.1")
+}
+
+func TestHandlerUpstreamFail(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "0.0.0.0" ],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	q := createQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	if rw.outmsg.Rcode != dns.RcodeServerFailure {
+		t.Errorf("Invalid Rcode - expecting SRVFAIL: %d", rw.outmsg.Rcode)
+	}
+}
+
+func TestHandlerCache(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "1.1.1.1" ],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	q := createQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	checkResponse(t, rw.outmsg, "127.0.0.1")
+
+	if _, ok := c.Cache.Get(q); !ok {
+		t.Errorf("Error getting query from cache")
+	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur/config"
+	"github.com/paulc/dinosaur/logger"
 )
 
 func createQuery(qname string, qtype string) *dns.Msg {
@@ -14,17 +15,24 @@ func createQuery(qname string, qtype string) *dns.Msg {
 }
 
 func checkResponse(t *testing.T, msg *dns.Msg, expected string) {
+	if msg == nil {
+		t.Fatalf("Invalid DNS Response (Nil)")
+	}
 	if len(msg.Answer) == 0 {
-		t.Errorf("Invalid DNS Response")
+		if msg.Rcode == dns.RcodeServerFailure {
+			t.Fatalf("Upstream error (SRVFAIL) - check network?")
+		} else {
+			t.Fatalf("Invalid DNS Response - No Answer RRs")
+		}
 		return
 	}
-	rrtype := msg.Answer[0].Header().Rrtype
-	if rrtype == dns.TypeA {
-		if msg.Answer[0].(*dns.A).A.String() != expected {
-			t.Errorf("Invalid DNS response: %s", msg.Answer[0].(*dns.A).A)
+	switch v := msg.Answer[0].(type) {
+	case *dns.A:
+		if v.A.String() != expected {
+			t.Errorf("Invalid DNS response: %s", v.A)
 		}
-	} else {
-		t.Errorf("Unexpected RR type: %s", dns.TypeToString[rrtype])
+	default:
+		t.Errorf("Unexpected RR type: %s", v)
 	}
 }
 
@@ -32,7 +40,7 @@ func TestDnsRequest(t *testing.T) {
 
 	out, err := dnsRequest(createQuery("127.0.0.1.nip.io.", "A"), "1.1.1.1:53")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 		return
 	}
 	checkResponse(t, out, "127.0.0.1")
@@ -42,7 +50,7 @@ func TestDohRequest(t *testing.T) {
 
 	out, err := dohRequest(createQuery("127.0.0.1.nip.io.", "A"), "https://cloudflare-dns.com/dns-query")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 		return
 	}
 	checkResponse(t, out, "127.0.0.1")
@@ -52,17 +60,16 @@ func TestResolve(t *testing.T) {
 
 	c := config.NewProxyConfig()
 	c.Upstream = []string{"1.1.1.1:53"}
+	c.Log = logger.New(logger.NewDiscard(false))
 
 	out, err, cached := resolve(c, createQuery("127.0.0.1.nip.io.", "A"))
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 	checkResponse(t, out, "127.0.0.1")
 
 	if cached == true {
 		t.Errorf("Error: cached")
-		return
 	}
 }
 
@@ -70,22 +77,22 @@ func TestResolveCached(t *testing.T) {
 
 	c := config.NewProxyConfig()
 	c.Upstream = []string{"1.1.1.1:53"}
+	c.Log = logger.New(logger.NewDiscard(false))
 
 	_, err, _ := resolve(c, createQuery("127.0.0.1.nip.io.", "A"))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	out, err, cached := resolve(c, createQuery("127.0.0.1.nip.io.", "A"))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	checkResponse(t, out, "127.0.0.1")
 
 	if cached != true {
 		t.Errorf("Error: not cached")
-		return
 	}
 }
 
@@ -93,10 +100,11 @@ func TestResolveInvalidUpstream(t *testing.T) {
 
 	c := config.NewProxyConfig()
 	c.Upstream = []string{"0.0.0.0:53", "1.1.1.1:53"}
+	c.Log = logger.New(logger.NewDiscard(false))
 
 	out, err, cached := resolve(c, createQuery("127.0.0.1.nip.io.", "A"))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	checkResponse(t, out, "127.0.0.1")
