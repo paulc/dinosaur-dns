@@ -184,7 +184,9 @@ func (user_config *UserConfig) UpdateBlockList(bl *blocklist.BlockList) error {
 
 	// Delete blocklist entries last
 	for _, v := range user_config.BlockDelete {
-		bl.Delete(v)
+		if _, err := bl.DeleteEntry(v, dns.TypeANY); err != nil {
+			return err
+		}
 	}
 
 	return nil

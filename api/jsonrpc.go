@@ -86,8 +86,12 @@ func (s *ApiService) BlockListDelete(r *http.Request,
 		Name string `json:"name"`
 	},
 	res *struct {
-		Count int `json:"count"`
+		Found bool `json:"found"`
 	}) error {
-	res.Count = s.config.BlockList.Delete(req.Name)
+	var err error
+	res.Found, err = s.config.BlockList.DeleteEntry(req.Name, dns.TypeANY)
+	if err != nil {
+		return err
+	}
 	return nil
 }
