@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/api"
-	"github.com/paulc/dinosaur/blocklist"
-	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/proxy"
+	"github.com/paulc/dinosaur-dns/api"
+	"github.com/paulc/dinosaur-dns/blocklist"
+	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/proxy"
 )
 
 func AclToString(acl []net.IPNet) (out []string) {

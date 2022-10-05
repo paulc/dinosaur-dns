@@ -1,4 +1,4 @@
-module github.com/paulc/dinosaur
+module github.com/paulc/dinosaur-dns
 
 go 1.18
 

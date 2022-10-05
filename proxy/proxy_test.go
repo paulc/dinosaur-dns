@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/logger"
+	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/logger"
 )
 
 func createQuery(qname string, qtype string) *dns.Msg {

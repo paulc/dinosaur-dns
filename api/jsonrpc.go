@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/config"
+	"github.com/paulc/dinosaur-dns/config"
 )
 
 type ApiService struct {

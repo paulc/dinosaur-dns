@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/statshandler"
+	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
 func matchDomain(domains []string, name string) bool {

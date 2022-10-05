@@ -13,8 +13,8 @@ import (
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 	"github.com/lpar/gzipped"
-	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/logger"
+	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/logger"
 )
 
 //go:embed static/*

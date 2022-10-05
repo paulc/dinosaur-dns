@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/paulc/dinosaur/blocklist"
-	"github.com/paulc/dinosaur/logger"
-	"github.com/paulc/dinosaur/util"
+	"github.com/paulc/dinosaur-dns/blocklist"
+	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/util"
 )
 
 type UserConfig struct {

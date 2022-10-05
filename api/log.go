@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/paulc/dinosaur/statshandler"
+	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
 func makeLogHandler(statsHandler *statshandler.StatsHandler) http.HandlerFunc {

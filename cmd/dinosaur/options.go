@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/paulc/dinosaur/config"
-	"github.com/paulc/dinosaur/util"
+	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/util"
 )
 
 func GetUserConfig() (*config.UserConfig, error) {

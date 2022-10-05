@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/paulc/dinosaur/blocklist"
-	"github.com/paulc/dinosaur/cache"
-	"github.com/paulc/dinosaur/logger"
-	"github.com/paulc/dinosaur/statshandler"
+	"github.com/paulc/dinosaur-dns/blocklist"
+	"github.com/paulc/dinosaur-dns/cache"
+	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
 type ProxyConfig struct {
