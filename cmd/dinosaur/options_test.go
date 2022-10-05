@@ -19,6 +19,7 @@ func TestGetUserConfig(t *testing.T) {
 		"-upstream", "8.8.8.8",
 		"-acl", "127.0.0.1/32",
 		"-acl", "::1/128",
+		"-block", "abcd.xyz",
 		"-dns64",
 		"-dns64-prefix", "1111::/96",
 		"-api",
@@ -38,6 +39,7 @@ func TestGetUserConfig(t *testing.T) {
 	if slices.Compare(user_config.Listen, []string{"127.0.0.1:8053", "[::1]:8053"}) != 0 ||
 		slices.Compare(user_config.Upstream, []string{"1.1.1.1", "8.8.8.8"}) != 0 ||
 		slices.Compare(user_config.Acl, []string{"127.0.0.1/32", "::1/128"}) != 0 ||
+		slices.Compare(user_config.Block, []string{"abcd.xyz"}) != 0 ||
 		!user_config.Dns64 ||
 		user_config.Dns64Prefix != "1111::/96" ||
 		!user_config.Api ||
