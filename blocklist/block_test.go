@@ -15,7 +15,7 @@ var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
 
 func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
-		result := root.MatchQ(v, qtype)
+		result := root.Match(v, qtype)
 		if result != expected {
 			t.Errorf("%s %s == %t (expected %t)", v, dns.TypeToString[qtype], result, expected)
 		}

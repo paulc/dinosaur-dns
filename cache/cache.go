@@ -157,6 +157,13 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 	return reply, true
 }
 
+// Convenience wrapper for c.Add - for testing
+func (c *DNSCache) GetName(qname string, qtype string) (*dns.Msg, bool) {
+	msg := new(dns.Msg)
+	msg.SetQuestion(qname, dns.StringToType[qtype])
+	return c.Get(msg)
+}
+
 func (c *DNSCache) Delete(query *dns.Msg) {
 
 	c.Lock()

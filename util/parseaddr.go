@@ -12,13 +12,18 @@ import (
 //    ip:port
 //    [ip6]:port
 //    ip 				(default port)
-//    ip6		    	(default port)
+//    [ip6]		    	(default port)
 //    interface:port	(all addresses on interface)
 //    interface			(all addresses on interface - default port)
 //
 // Returns list of ip:port addrs suitable for net.Listen
 
 func ParseAddr(addr string, defaultPort int) (addrs []string, err error) {
+
+	if addr[0] != '[' && strings.Count(addr, ":") > 1 {
+		// Bare IPv6 address
+		addr = fmt.Sprintf("[%s]:%d", addr, defaultPort)
+	}
 
 	portRE := regexp.MustCompile(`:\d+$`)
 
@@ -46,7 +51,7 @@ func ParseAddr(addr string, defaultPort int) (addrs []string, err error) {
 	for _, v := range ifaddrs {
 		ip, _, err := net.ParseCIDR(v.String())
 		if err != nil {
-			return nil, fmt.Errorf("Error parsing addresse <%s>: %s", v.String(), err)
+			return nil, fmt.Errorf("Error parsing address <%s>: %s", v.String(), err)
 		}
 		if ip.IsLinkLocalUnicast() {
 			addrs = append(addrs, net.JoinHostPort(ip.String()+"%"+netif.Name, port))

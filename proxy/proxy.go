@@ -207,7 +207,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		logItem.Acl = true
 
 		// Check blocklist
-		if config.BlockList.MatchQ(qname, qtype) {
+		if config.BlockList.Match(qname, qtype) {
 			log.Printf("Connection: %s <%s %s> [blocked]", clientHost, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
 			logItem.Blocked = true

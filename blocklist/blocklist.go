@@ -72,7 +72,7 @@ func (b *BlockList) AddHostsEntry(entry string) error {
 }
 
 // Match query against BlockList
-func (b *BlockList) MatchQ(qname string, qtype uint16) bool {
+func (b *BlockList) Match(qname string, qtype uint16) bool {
 	b.Lock()
 	defer b.Unlock()
 	return b.Root.Match(splitName(qname), qtype)

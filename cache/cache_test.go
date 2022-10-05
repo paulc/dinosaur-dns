@@ -174,3 +174,17 @@ func TestAddRR(t *testing.T) {
 		t.Errorf("AddRR :: not found")
 	}
 }
+
+func TestGetName(t *testing.T) {
+	cache := New()
+	err := cache.AddRR("abc.def.com 60 A 1.2.3.4", true)
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, found := cache.GetName("abc.def.com.", "A")
+
+	if found == false {
+		t.Errorf("GetName:: not found")
+	}
+}

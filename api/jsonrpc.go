@@ -17,62 +17,59 @@ func NewApiService(c *config.ProxyConfig) *ApiService {
 
 // Get config
 
-func (s *ApiService) Config(r *http.Request, req *struct{}, res *config.UserConfig) error {
+type Empty struct{}
+
+func (s *ApiService) Config(r *http.Request, req *Empty, res *config.UserConfig) error {
 	*res = *s.config.UserConfig
 	return nil
 }
 
 // Manage Cache
 
-func (s *ApiService) CacheAdd(r *http.Request,
-	req *struct {
-		RR        string `json:"rr"`
-		Permanent bool   `json:"permanent"`
-	},
-	res *struct {
-	}) error {
+type CacheAddReq struct {
+	RR        string `json:"rr"`
+	Permanent bool   `json:"permanent"`
+}
+
+func (s *ApiService) CacheAdd(r *http.Request, req *CacheAddReq, res *Empty) error {
 	return s.config.Cache.AddRR(req.RR, req.Permanent)
 }
 
-func (s *ApiService) CacheDelete(r *http.Request,
-	req *struct {
-		Name  string `json:"name"`
-		Qtype string `json:"qtype"`
-	},
-	res *struct {
-	}) error {
+type CacheDeleteReq struct {
+	Name  string `json:"name"`
+	Qtype string `json:"qtype"`
+}
+
+func (s *ApiService) CacheDelete(r *http.Request, req *CacheDeleteReq, res *Empty) error {
 	s.config.Cache.DeleteName(req.Name, req.Qtype)
 	return nil
 }
 
-func (s *ApiService) CacheDebug(r *http.Request,
-	req *struct {
-	},
-	res *struct {
-		Entries []string `json:"entries"`
-	}) error {
+type CacheDebugRes struct {
+	Entries []string `json:"entries"`
+}
+
+func (s *ApiService) CacheDebug(r *http.Request, req *Empty, res *CacheDebugRes) error {
 	res.Entries = s.config.Cache.Debug()
 	return nil
 }
 
 // Manage Blocklist
 
-func (s *ApiService) BlockListCount(r *http.Request,
-	req *struct {
-	},
-	res *struct {
-		Count int `json:"count"`
-	}) error {
+type BlockListCountRes struct {
+	Count int `json:"count"`
+}
+
+func (s *ApiService) BlockListCount(r *http.Request, req *Empty, res *BlockListCountRes) error {
 	res.Count = s.config.BlockList.Count()
 	return nil
 }
 
-func (s *ApiService) BlockListAdd(r *http.Request,
-	req *struct {
-		Entries []string `json:"entries"`
-	},
-	res *struct {
-	}) error {
+type BlockListAddReq struct {
+	Entries []string `json:"entries"`
+}
+
+func (s *ApiService) BlockListAdd(r *http.Request, req *BlockListAddReq, res *Empty) error {
 	for _, v := range req.Entries {
 		if err := s.config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			return err
@@ -81,13 +78,14 @@ func (s *ApiService) BlockListAdd(r *http.Request,
 	return nil
 }
 
-func (s *ApiService) BlockListDelete(r *http.Request,
-	req *struct {
-		Name string `json:"name"`
-	},
-	res *struct {
-		Found bool `json:"found"`
-	}) error {
+type BlockListDeleteReq struct {
+	Name string `json:"name"`
+}
+type BlockListDeleteRes struct {
+	Found bool `json:"found"`
+}
+
+func (s *ApiService) BlockListDelete(r *http.Request, req *BlockListDeleteReq, res *BlockListDeleteRes) error {
 	var err error
 	res.Found, err = s.config.BlockList.DeleteEntry(req.Name, dns.TypeANY)
 	if err != nil {
