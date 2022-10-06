@@ -1,7 +1,6 @@
 package blocklist
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -27,8 +26,6 @@ var testBlockList = []string{
 	"multi.block-c.xyz:TXT",
 	"multi.block-c.xyz:MX",
 }
-
-var testBlockListJSON = `[{"name":".","block":["NS"]},{"name":"aaaa.block-a.xyz.","block":["ANY"]},{"name":"bbbb.block-a.xyz.","block":["ANY"]},{"name":"cccc.block-a.xyz.","block":["ANY"]},{"name":"a.block-b.xyz.","block":["A"]},{"name":"aaaa.block-b.xyz.","block":["AAAA"]},{"name":"txt.block-b.xyz.","block":["TXT"]},{"name":"mx.block-b.xyz.","block":["MX"]},{"name":"multi.block-c.xyz.","block":["A","AAAA","TXT","MX"]}]`
 
 func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
@@ -79,13 +76,6 @@ func TestBlockListDump(t *testing.T) {
 				t.Errorf("Invalid Entry: %s %s", v.Name, v.Block)
 			}
 		}
-	}
-	dump_json, err := json.Marshal(dump)
-	if err != nil {
-		t.Error(err)
-	}
-	if string(dump_json) != testBlockListJSON {
-		t.Error(string(dump_json))
 	}
 }
 
