@@ -73,7 +73,7 @@ func (l *level) Match(parts []string, qtype uint16) bool {
 	return false
 }
 
-// Delete entry (need to match full path)
+// Delete entry
 func (l *level) Delete(parts []string, qtype uint16) bool {
 	if len(parts) == 0 {
 		// Last node in path
@@ -97,6 +97,22 @@ func (l *level) Delete(parts []string, qtype uint16) bool {
 	return false
 }
 
+// Delete tree
+func (l *level) DeleteTree(parts []string) bool {
+	if len(parts) == 1 {
+		// Delete child node
+		_, ok := l.Children[parts[0]]
+		delete(l.Children, parts[0])
+		return ok
+	}
+	next, rest := parts[len(parts)-1], parts[:len(parts)-1]
+	child, ok := l.Children[next]
+	if ok {
+		return child.DeleteTree(rest)
+	}
+	return false
+}
+
 func (l *level) Count() (total int) {
 	if l.BlockAny {
 		total += 1
@@ -108,12 +124,16 @@ func (l *level) Count() (total int) {
 	return
 }
 
-func (l *level) Dump(prefix []string, out *[]string) {
+func (l *level) Dump(prefix []string, out *[]BlockEntry) {
+	entry := BlockEntry{Name: strings.Join(prefix, ".") + "."}
 	if l.BlockAny {
-		*out = append(*out, fmt.Sprintf("%s.:ANY", strings.Join(prefix, ".")))
+		entry.Block = append(entry.Block, "ANY")
 	}
 	for _, v := range l.BlockQtype {
-		*out = append(*out, fmt.Sprintf("%s.:%s", strings.Join(prefix, "."), dns.TypeToString[v]))
+		entry.Block = append(entry.Block, dns.TypeToString[v])
+	}
+	if len(entry.Block) > 0 {
+		*out = append(*out, entry)
 	}
 	for k, v := range l.Children {
 		v.Dump(append([]string{k}, prefix...), out)

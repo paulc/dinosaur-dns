@@ -21,6 +21,11 @@ type BlockList struct {
 	Root *level
 }
 
+type BlockEntry struct {
+	Name  string   `json:"name"`
+	Block []string `json:"block"`
+}
+
 func New() *BlockList {
 	return &BlockList{Root: NewLevel()}
 }
@@ -102,13 +107,24 @@ func (b *BlockList) DeleteEntry(entry string, default_qtype uint16) (bool, error
 	}
 }
 
-func (b *BlockList) Dump() (out []string) {
+// Delete subtree under qname
+func (b *BlockList) DeleteTree(qname string) bool {
+	b.Lock()
+	defer b.Unlock()
+	root := b.Root
+	return root.DeleteTree(splitName(qname))
+}
+
+func (b *BlockList) Dump() (out []BlockEntry) {
 	b.Lock()
 	defer b.Unlock()
 	b.Root.Dump([]string{}, &out)
 	return
 }
 
+// Note - this counts the number of block entries not the number of nodes
+// (nodes with no block entries are not counted and if a single node has
+// multiple block entries these are all counted)
 func (b *BlockList) Count() int {
 	b.Lock()
 	defer b.Unlock()

@@ -1,18 +1,20 @@
 package blocklist
 
 import (
-	"sort"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/miekg/dns"
 )
 
 var BlockDomains = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com"}
-var BlockDomainsType = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com", ".:AAAA", "txt.block.com:TXT", "ns.block.com:NS"}
+var BlockDomainsType = []string{"aaa.block.com", "BBB.BLOCK.COM", "ddd.ccc.block.com", ".:AAAA", "txt.block.com:TXT", "ns.block.com:NS", "xxxx.block.com:MX", "xxxx.block.com:SRV"}
 
 var CheckDomainsTrue = []string{"aaa.block.com", "xxx.bbb.block.com", "XXX.DDD.CCC.BLOCK.COM"}
 var CheckDomainsFalse = []string{"abcd.ok.com", "CCC.BLOCK.COM"}
 
+/*
 func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
 		result := root.Match(v, qtype)
@@ -21,6 +23,7 @@ func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, exp
 		}
 	}
 }
+*/
 
 func TestBlockCount(t *testing.T) {
 	bl := New()
@@ -39,7 +42,9 @@ func TestBlockDump(t *testing.T) {
 	}
 
 	dump := bl.Dump()
-	sort.Slice(dump, func(i, j int) bool { return dump[i] < dump[j] })
+
+	b, _ := json.MarshalIndent(dump, "", "  ")
+	fmt.Println(string(b))
 
 	if len(dump) != len(BlockDomainsType) {
 		t.Errorf("len(dump) = %d (expected %d)", len(dump), len(BlockDomainsType))
@@ -64,17 +69,18 @@ func TestBlockDelete(t *testing.T) {
 	test_match(t, bl, BlockDomains[1:], dns.TypeA, true)
 }
 
-/*
 func TestBlockDeleteTree(t *testing.T) {
 	bl := New()
 	for _, v := range BlockDomains {
 		bl.Add(v, dns.TypeANY)
 	}
-	if bl.Delete("block.com") != len(BlockDomains) {
-		t.Errorf("t.Delete(%s) error", "block.com")
+	if bl.DeleteTree("ccc.block.com") != true {
+		t.Errorf("t.DeleteTree error: %s", "block.com")
+	}
+	if bl.Count() != len(BlockDomains)-2 {
+		t.Errorf("root.Count() = %d (expected %d)", bl.Count(), len(BlockDomains)-1)
 	}
 }
-*/
 
 func TestBlockAny(t *testing.T) {
 	bl := New()
