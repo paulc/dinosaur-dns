@@ -37,7 +37,8 @@ func TestParseAddr(t *testing.T) {
 	testParseAddr(t, "bare_ip6", "2000:abcd:abcd::1", 53, "[2000:abcd:abcd::1]:53", false)
 	testParseAddr(t, "ip6:port", "[::1]:8053", 53, "[::1]:8053", false)
 	// Fails on Github CI (no lo0 interface?)
-	if len(os.Getenv("GITHUB_ACTIONS")) != 0 {
+	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
+	if !isGH {
 		testParseAddr(t, "interface", "lo0", 53, "127.0.0.1:53", false)
 		testParseAddr(t, "interface:port", "lo0:8053", 53, "127.0.0.1:8053", false)
 	}

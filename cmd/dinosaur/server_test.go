@@ -14,7 +14,8 @@ import (
 func TestServer(t *testing.T) {
 
 	// Dont run on Github CI
-	if len(os.Getenv("GITHUB_ACTIONS")) != 0 {
+	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
+	if !isGH {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.ListenAddr = []string{"127.0.0.1:8053"}
