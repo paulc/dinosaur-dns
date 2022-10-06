@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -12,26 +13,30 @@ import (
 
 func TestServer(t *testing.T) {
 
-	proxy_config := config.NewProxyConfig()
-	proxy_config.ListenAddr = []string{"127.0.0.1:8053"}
-	proxy_config.Upstream = []string{"1.1.1.1:53"}
-	proxy_config.Log = logger.New(logger.NewDiscard(false))
+	// Dont run on Github CI
+	if len(os.Getenv("GITHUB_ACTIONS")) != 0 {
 
-	ctx, cancelCtx := context.WithCancel(context.Background())
-	ready := make(chan bool)
+		proxy_config := config.NewProxyConfig()
+		proxy_config.ListenAddr = []string{"127.0.0.1:8053"}
+		proxy_config.Upstream = []string{"1.1.1.1:53"}
+		proxy_config.Log = logger.New(logger.NewDiscard(false))
 
-	go StartServer(ctx, proxy_config, ready)
+		ctx, cancelCtx := context.WithCancel(context.Background())
+		ready := make(chan bool)
 
-	// Wait for server to start
-	<-ready
+		go StartServer(ctx, proxy_config, ready)
 
-	m := util.CreateQuery("127.0.0.1.nip.io", "A")
+		// Wait for server to start
+		<-ready
 
-	c := new(dns.Client)
-	in, _, err := c.Exchange(m, "127.0.0.1:8053")
-	if err != nil {
-		t.Fatal(err)
+		m := util.CreateQuery("127.0.0.1.nip.io", "A")
+
+		c := new(dns.Client)
+		in, _, err := c.Exchange(m, "127.0.0.1:8053")
+		if err != nil {
+			t.Fatal(err)
+		}
+		util.CheckResponse(t, in, "127.0.0.1")
+		cancelCtx()
 	}
-	util.CheckResponse(t, in, "127.0.0.1")
-	cancelCtx()
 }
