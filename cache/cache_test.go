@@ -7,13 +7,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur-dns/util"
 )
-
-func createQuery(qname string, qtype string) *dns.Msg {
-	msg := new(dns.Msg)
-	msg.SetQuestion(qname, dns.StringToType[qtype])
-	return msg
-}
 
 func createCacheItem(qname string, qtype string, answer string) (msg *dns.Msg, err error) {
 
@@ -62,7 +57,7 @@ func TestAdd(t *testing.T) {
 
 	// Get from cache
 	for i := 0; i < 100; i++ {
-		q := createQuery(fmt.Sprintf("%04d.test.com", i), "A")
+		q := util.CreateQuery(fmt.Sprintf("%04d.test.com", i), "A")
 		_, found := cache.Get(q)
 		if !found {
 			t.Errorf("%04d.test.com not found", i)
@@ -72,7 +67,7 @@ func TestAdd(t *testing.T) {
 	// Jump forward time
 	now = now.Add(time.Second * 100)
 	for i := 0; i < 100; i++ {
-		q := createQuery(fmt.Sprintf("%04d.test.com", i), "A")
+		q := util.CreateQuery(fmt.Sprintf("%04d.test.com", i), "A")
 		_, found := cache.Get(q)
 		if found {
 			t.Errorf("%04d.test.com found (should be expired)", i)
@@ -142,7 +137,7 @@ func TestConcurrent(t *testing.T) {
 
 	go func() {
 		for i := 0; i < 100000; i++ {
-			q := createQuery(fmt.Sprintf("%08d.test.com", i), "A")
+			q := util.CreateQuery(fmt.Sprintf("%08d.test.com", i), "A")
 			cache.Get(q)
 		}
 		wg.Done()
@@ -166,7 +161,7 @@ func TestAddRR(t *testing.T) {
 		t.Error(err)
 	}
 
-	q := createQuery("abc.def.com.", "A")
+	q := util.CreateQuery("abc.def.com.", "A")
 
 	_, found := cache.Get(q)
 

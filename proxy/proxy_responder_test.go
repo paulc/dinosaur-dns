@@ -9,6 +9,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
 	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/util"
 )
 
 // Mock for dns.ResponseWriter
@@ -65,10 +66,10 @@ func TestHandlerSimple(t *testing.T) {
 
 	handler := MakeHandler(c)
 	rw := NewTestResponseWriter()
-	q := createQuery("127.0.0.1.nip.io.", "A")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	checkResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamDNS(t *testing.T) {
@@ -87,10 +88,10 @@ func TestHandlerUpstreamDNS(t *testing.T) {
 
 	handler := MakeHandler(c)
 	rw := NewTestResponseWriter()
-	q := createQuery("127.0.0.1.nip.io.", "A")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	checkResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamDOH(t *testing.T) {
@@ -109,10 +110,10 @@ func TestHandlerUpstreamDOH(t *testing.T) {
 
 	handler := MakeHandler(c)
 	rw := NewTestResponseWriter()
-	q := createQuery("127.0.0.1.nip.io.", "A")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	checkResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamFail(t *testing.T) {
@@ -131,7 +132,7 @@ func TestHandlerUpstreamFail(t *testing.T) {
 
 	handler := MakeHandler(c)
 	rw := NewTestResponseWriter()
-	q := createQuery("127.0.0.1.nip.io.", "A")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
 	if rw.outmsg.Rcode != dns.RcodeServerFailure {
@@ -155,10 +156,10 @@ func TestHandlerCache(t *testing.T) {
 
 	handler := MakeHandler(c)
 	rw := NewTestResponseWriter()
-	q := createQuery("127.0.0.1.nip.io.", "A")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	checkResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
 
 	if _, ok := c.Cache.Get(q); !ok {
 		t.Errorf("Error getting query from cache")
