@@ -24,10 +24,10 @@ func makeLogHandler(statsHandler *statshandler.StatsHandler) http.HandlerFunc {
 		statsHandler.MakeLogChannel(r.RemoteAddr, logChan)
 
 		defer func() {
-			log.Printf("Log Handler Disconnected: %s\n", r.RemoteAddr)
 			// Close the log channel
-			statsHandler.CloseLogChannel(r.RemoteAddr)
 			close(logChan)
+			statsHandler.CloseLogChannel(r.RemoteAddr)
+			log.Printf("Log Handler Disconnected: %s\n", r.RemoteAddr)
 		}()
 
 		// Create http.Flusher

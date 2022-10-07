@@ -25,7 +25,7 @@ func matchDomain(domains []string, name string) bool {
 }
 
 func dnsRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
-	c := new(dns.Client)
+	c := &dns.Client{}
 	out, _, err := c.Exchange(r, resolver)
 	if err != nil {
 		return nil, fmt.Errorf("DNS Query Error: %s", err)

@@ -65,6 +65,11 @@ func (s *StatsHandler) Tail(n int) []ConnectionLog {
 
 func (s *StatsHandler) MakeLogChannel(id string, ch chan string) {
 	hookf := func(c ConnectionLog) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Ignore write to closed channel
+			}
+		}()
 		b, _ := json.Marshal(c)
 		ch <- string(b)
 	}

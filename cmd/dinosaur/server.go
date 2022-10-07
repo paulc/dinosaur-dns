@@ -38,6 +38,10 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		server_udp := &dns.Server{
 			Addr: listenAddr,
 			Net:  net_udp,
+			// Accept large UDP messages (we pass through EDNS0
+			// messages to the upstream resolver - this just ensures
+			// that we can handle these)
+			UDPSize: 4096,
 		}
 
 		go func() {

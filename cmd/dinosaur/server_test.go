@@ -32,7 +32,7 @@ func TestServer(t *testing.T) {
 
 		m := util.CreateQuery("127.0.0.1.nip.io", "A")
 
-		c := new(dns.Client)
+		c := &dns.Client{}
 		in, _, err := c.Exchange(m, "127.0.0.1:8053")
 		if err != nil {
 			t.Fatal(err)
