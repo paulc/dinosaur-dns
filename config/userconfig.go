@@ -87,7 +87,12 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 
 	// Local RR file/url
 	for _, v := range user_config.Localzone {
-		if _, err := util.URLReader(v, func(line string) error { return config.Cache.AddRR(line, true) }); err != nil {
+		if _, err := util.URLReader(v, func(line string) error {
+			if line == "" || line[0] == '#' {
+				return nil
+			}
+			return config.Cache.AddRR(line, true)
+		}); err != nil {
 			return err
 		}
 	}

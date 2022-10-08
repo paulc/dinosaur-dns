@@ -237,18 +237,21 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			}
 			// Rewrite response
 			dns64_out.Question[0].Qtype = dns.TypeAAAA
-			for i, v := range dns64_out.Answer {
-				if v.Header().Rrtype == dns.TypeA {
-					r := new(dns.AAAA)
-					r.Hdr = dns.RR_Header{Name: v.Header().Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: v.Header().Ttl}
-					r.AAAA = config.Dns64Prefix.IP
-					r.AAAA[12] = v.(*dns.A).A[0]
-					r.AAAA[13] = v.(*dns.A).A[1]
-					r.AAAA[14] = v.(*dns.A).A[2]
-					r.AAAA[15] = v.(*dns.A).A[3]
-					dns64_out.Answer[i] = r
-				} else {
-					// log.Printf("DNS64: Unexpected RR: %s", v)
+			for i, rr := range dns64_out.Answer {
+				switch v := rr.(type) {
+				case *dns.A:
+					// Force 4-byte address
+					ip4 := v.A.To4()
+					if ip4 != nil {
+						r := new(dns.AAAA)
+						r.Hdr = dns.RR_Header{Name: v.Header().Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: v.Header().Ttl}
+						r.AAAA = config.Dns64Prefix.IP
+						r.AAAA[12] = ip4[0]
+						r.AAAA[13] = ip4[1]
+						r.AAAA[14] = ip4[2]
+						r.AAAA[15] = ip4[3]
+						dns64_out.Answer[i] = r
+					}
 				}
 			}
 			if cached {
