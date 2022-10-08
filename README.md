@@ -27,28 +27,50 @@ The server was origibally written as a simple upstream for Unbound which wouuld 
 
 ```
 Usage of ./cmd/dinosaur/dinosaur:
+
   -acl value
     	Access control list (CIDR)
+  -api
+    	Enable API (default: false)
+  -api-bind string
+    	API bind address (default: 127.0.0.1:8553)
   -block value
     	Block entry (format: 'domain[:qtype]')
+  -block-delete value
+    	Delete block entry (format: 'domain[:qtype]')
   -blocklist value
     	Blocklist file
   -blocklist-aaaa value
     	Blocklist file (AAAA)
   -blocklist-from-hosts value
     	Blocklist from /etc/hosts format file
+  -config string
+    	JSON config file
   -debug
-    	Debug
+    	Discard logs (default: false)
+  -discard
+    	Debug logging (default: false)
+  -dns64
+    	Enable DNS64 (for queries from IPv6 addresses)
+  -dns64-prefix string
+    	DNS64 prefix (default: 64:ff9b::/96)
   -help
     	Show usage
   -listen value
-    	Listen address (default: 127.0.0.1:8053)
+    	Listen address/interface (default: lo0:8053)
   -local value
     	Local DNS resource record
   -localzone value
     	Local DNS resource record file
+  -refresh
+    	Auto refresh blocklist (default: false)
+  -refresh-interval string
+    	Blocklist refresh interval (default: 24hrs)
+  -syslog
+    	Use syslog (default: false)
   -upstream value
     	Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)
+
 ```
 
 (Netflix domains to filter: https://openconnect.netflix.com/mobiledeliverydomains.txt)
