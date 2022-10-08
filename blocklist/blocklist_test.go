@@ -1,10 +1,12 @@
 package blocklist
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur-dns/util"
 	"golang.org/x/exp/slices"
 )
 
@@ -26,6 +28,39 @@ var testBlockList = []string{
 	"multi.block-c.xyz:TXT",
 	"multi.block-c.xyz:MX",
 }
+
+var testHostsEntry = []string{
+	"0.0.0.0	aaaa.block-a.xyz		# A comment",
+	"0.0.0.0	bbbb.block-a.xyz",
+	"0.0.0.0	cccc.block-a.xyz",
+}
+
+var blockListFile = `
+# A blocklist file
+
+aaaa.block-a.xyz
+bbbb.block-a.xyz
+cccc.block-a.xyz
+
+a.block-b.xyz:A
+aaaa.block-b.xyz:AAAA
+txt.block-b.xyz:TXT
+mx.block-b.xyz:MX
+
+multi.block-c.xyz:A
+multi.block-c.xyz:AAAA
+multi.block-c.xyz:TXT
+multi.block-c.xyz:MX
+
+`
+
+var blockListHostsFile = `
+# A hosts file
+
+0.0.0.0	aaaa.block-a.xyz		# A comment
+0.0.0.0	bbbb.block-a.xyz
+0.0.0.0	cccc.block-a.xyz
+`
 
 func test_match(t *testing.T, root *BlockList, names []string, qtype uint16, expected bool) {
 	for _, v := range names {
@@ -151,4 +186,51 @@ func TestBlockListMatchRoot(t *testing.T) {
 		bl.AddEntry(v, dns.TypeANY)
 	}
 	test_match(t, bl, []string{"aaaa.bbbb", "xxx.yyy.zzz", "."}, dns.TypeNS, true)
+}
+
+func TestAddHostsEntry(t *testing.T) {
+	bl := New()
+	for _, v := range testHostsEntry {
+		if err := bl.AddHostsEntry(v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	test_match(t, bl, []string{"aaaa.block-a.xyz", "sub.bbbb.block-a.xyz"}, dns.TypeA, true)
+}
+
+func TestAddInvalidHostsEntry(t *testing.T) {
+	bl := New()
+	if err := bl.AddHostsEntry("abcd"); err == nil {
+		t.Fatal("Expected error")
+	}
+}
+
+func TestBlockListReader(t *testing.T) {
+	bl := New()
+	f := MakeBlockListReaderf(bl, dns.TypeA)
+	r := bytes.NewBufferString(blockListFile)
+	n, err := util.LineReader(r, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != strings.Count(blockListFile, "\n") {
+		t.Fatalf("n=%d (expected %d)", n, strings.Count(blockListFile, "\n"))
+	}
+	test_match(t, bl, []string{"aaaa.block-a.xyz", "a.block-b.xyz", "sub.a.block-b.xyz", "multi.block-c.xyz"}, dns.TypeA, true)
+	test_match(t, bl, []string{"aaaa.block-b.xyz", "sub.aaaa.block-b.xyz", "multi.block-c.xyz"}, dns.TypeAAAA, true)
+	test_match(t, bl, []string{"aaaa.block-b.xyz", "sub.aaaa.block-b.xyz"}, dns.TypeA, false)
+}
+
+func TestBlockListHostsReader(t *testing.T) {
+	bl := New()
+	f := MakeBlockListHostsReaderf(bl)
+	r := bytes.NewBufferString(blockListHostsFile)
+	n, err := util.LineReader(r, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != strings.Count(blockListHostsFile, "\n") {
+		t.Fatalf("n=%d (expected %d)", n, strings.Count(blockListFile, "\n"))
+	}
+	test_match(t, bl, []string{"aaaa.block-a.xyz", "sub.bbbb.block-a.xyz"}, dns.TypeA, true)
 }

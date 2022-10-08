@@ -30,6 +30,7 @@ func New() *BlockList {
 	return &BlockList{Root: NewLevel()}
 }
 
+// Add entry
 func (b *BlockList) Add(name string, qtype uint16) {
 	b.Lock()
 	defer b.Unlock()
@@ -83,6 +84,7 @@ func (b *BlockList) Match(qname string, qtype uint16) bool {
 	return b.Root.Match(splitName(qname), qtype)
 }
 
+// Delete single entry
 func (b *BlockList) Delete(qname string, qtype uint16) bool {
 	b.Lock()
 	defer b.Unlock()
@@ -115,6 +117,7 @@ func (b *BlockList) DeleteTree(qname string) bool {
 	return root.DeleteTree(splitName(qname))
 }
 
+// Dump BlockList entries
 func (b *BlockList) Dump() (out []BlockEntry) {
 	b.Lock()
 	defer b.Unlock()
