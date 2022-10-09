@@ -28,6 +28,9 @@ type ProxyConfig struct {
 	RefreshInterval time.Duration
 	Log             *logger.Logger
 	UserConfig      *UserConfig
+	Setuid          bool
+	SetuidUid       int
+	SetuidGid       int
 }
 
 func NewProxyConfig() *ProxyConfig {

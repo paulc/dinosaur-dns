@@ -25,6 +25,7 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var debugFlag = flag.Bool("debug", false, "Discard logs (default: false)")
 	var syslogFlag = flag.Bool("syslog", false, "Use syslog (default: false)")
 	var discardFlag = flag.Bool("discard", false, "Debug logging (default: false)")
+	var setuidFlag = flag.String("setuid", "", "Setuid/Setgid user[:group] (default: none)")
 
 	var listenFlag util.MultiFlag
 	flag.Var(&listenFlag, "listen", "Listen address/interface (default: lo0:8053)")
@@ -156,6 +157,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 	user_config.Debug = user_config.Debug || *debugFlag
 	user_config.Syslog = user_config.Syslog || *syslogFlag
 	user_config.Discard = user_config.Discard || *discardFlag
+
+	// Setuid
+	user_config.Setuid = *setuidFlag
 
 	// Set defaults if necessary
 	if len(user_config.Listen) == 0 {

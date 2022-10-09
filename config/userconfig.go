@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"regexp"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/logger"
 	"github.com/paulc/dinosaur-dns/util"
+	"golang.org/x/sys/unix"
 )
 
 type UserConfig struct {
@@ -33,6 +35,7 @@ type UserConfig struct {
 	Debug              bool     `json:"debug"`
 	Syslog             bool     `json:"syslog"`
 	Discard            bool     `json:"discard"`
+	Setuid             string   `json:"setuid"`
 }
 
 func NewUserConfig() *UserConfig {
@@ -149,6 +152,19 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 			config.Log = logger.New(logger.NewSyslog(user_config.Debug))
 		} else {
 			config.Log = logger.New(logger.NewStderr(user_config.Debug))
+		}
+	}
+
+	// Setuid
+	if user_config.Setuid != "" {
+		if unix.Getuid() != 0 {
+			log.Fatal("setuid: Must be running as root")
+		}
+		config.Setuid = true
+		var err error
+		config.SetuidUid, config.SetuidGid, err = util.SplitId(user_config.Setuid)
+		if err != nil {
+			log.Fatalf("setuid: %s", err)
 		}
 	}
 

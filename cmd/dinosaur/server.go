@@ -46,7 +46,7 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 
 		go func() {
 			if err := server_udp.ListenAndServe(); err != nil {
-				log.Fatal(err)
+				log.Fatal(listenAddr, ": ", err)
 			}
 		}()
 
@@ -58,10 +58,29 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 
 		go func() {
 			if err := server_tcp.ListenAndServe(); err != nil {
-				log.Fatal(err)
+				log.Fatal(listenAddr, ": ", err)
 			}
 		}()
 	}
+
+	/*
+
+		// XXX panics ???
+
+		// Wait for listeners to bind
+		time.Sleep(1 * time.Second)
+
+		// Change user/group
+		if proxy_config.Setuid {
+			if err := unix.Setgid(proxy_config.SetuidGid); err != nil {
+				log.Fatal("sidgid:", err)
+			}
+			if err := unix.Setuid(proxy_config.SetuidUid); err != nil {
+				log.Fatal("setuid", err)
+			}
+		}
+
+	*/
 
 	// Handle requests
 	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
