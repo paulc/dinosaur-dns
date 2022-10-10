@@ -71,6 +71,52 @@ func TestAPICacheAdd(t *testing.T) {
 	}
 }
 
+func TestAPICacheAddWithPtr(t *testing.T) {
+
+	api, c := setupApiService(t)
+	r := &http.Request{}
+
+	add_req := &CacheAddReq{"abc.com. 60 IN A 1.2.3.4", true}
+	add_res := &Empty{}
+
+	if err := api.CacheAddWithPtr(r, add_req, add_res); err != nil {
+		t.Fatal(err)
+	}
+
+	_, found := c.Cache.GetName("abc.com", "A")
+	if !found {
+		t.Errorf("Cache item not found")
+	}
+
+	_, found = c.Cache.GetName("4.3.2.1.in-addr.arpa.", "PTR")
+	if !found {
+		t.Errorf("Cache item not found")
+	}
+}
+
+func TestAPICacheAddWithPtrV6(t *testing.T) {
+
+	api, c := setupApiService(t)
+	r := &http.Request{}
+
+	add_req := &CacheAddReq{"abc.com. 60 IN AAAA 1234:5678:9abc::abcd", true}
+	add_res := &Empty{}
+
+	if err := api.CacheAddWithPtr(r, add_req, add_res); err != nil {
+		t.Fatal(err)
+	}
+
+	_, found := c.Cache.GetName("abc.com", "AAAA")
+	if !found {
+		t.Errorf("Cache item not found")
+	}
+
+	_, found = c.Cache.GetName("d.c.b.a.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.c.b.a.9.8.7.6.5.4.3.2.1.ip6.arpa.", "PTR")
+	if !found {
+		t.Errorf("Cache item not found")
+	}
+}
+
 func TestAPICacheDelete(t *testing.T) {
 
 	api, c := setupApiService(t)

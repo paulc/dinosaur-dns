@@ -4,6 +4,7 @@ package util
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"testing"
 )
@@ -64,22 +65,25 @@ func TestSplitId(t *testing.T) {
 			t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
 		}
 	}
-	for _, v := range []string{"nobody:nobody"} {
-		uid, gid, err := SplitId(v)
-		if err != nil {
-			t.Error(err)
+	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
+	if !isGH {
+		for _, v := range []string{"nobody:nobody"} {
+			uid, gid, err := SplitId(v)
+			if err != nil {
+				t.Error(err)
+			}
+			if uid == 0 || gid == 0 {
+				t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
+			}
 		}
-		if uid == 0 || gid == 0 {
-			t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
-		}
-	}
-	for _, v := range []string{"root:nobody"} {
-		uid, gid, err := SplitId(v)
-		if err != nil {
-			t.Error(err)
-		}
-		if uid == gid {
-			t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
+		for _, v := range []string{"root:nobody"} {
+			uid, gid, err := SplitId(v)
+			if err != nil {
+				t.Error(err)
+			}
+			if uid == gid {
+				t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
+			}
 		}
 	}
 

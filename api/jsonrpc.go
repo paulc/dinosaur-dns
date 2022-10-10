@@ -1,7 +1,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
@@ -33,6 +35,47 @@ type CacheAddReq struct {
 
 func (s *ApiService) CacheAdd(r *http.Request, req *CacheAddReq, res *Empty) error {
 	return s.config.Cache.AddRR(req.RR, req.Permanent)
+}
+
+// Add RR and associated PTR
+func (s *ApiService) CacheAddWithPtr(r *http.Request, req *CacheAddReq, res *Empty) error {
+	rr, err := dns.NewRR(req.RR)
+	if err != nil {
+		return err
+	}
+	switch v := rr.(type) {
+	case *dns.A:
+		ip4 := v.A.To4()
+		ptr := strings.Builder{}
+		for i := len(ip4) - 1; i >= 0; i-- {
+			fmt.Fprintf(&ptr, "%d.", ip4[i])
+		}
+		fmt.Fprintf(&ptr, "in-addr.arpa. %d IN PTR %s", v.Hdr.Ttl, v.Hdr.Name)
+		if err := s.config.Cache.AddRR(req.RR, req.Permanent); err != nil {
+			return err
+		}
+		if err := s.config.Cache.AddRR(ptr.String(), req.Permanent); err != nil {
+			return err
+		}
+		return nil
+	case *dns.AAAA:
+		ip6 := v.AAAA.To16()
+		ptr := strings.Builder{}
+		for i := len(ip6) - 1; i >= 0; i-- {
+			fmt.Fprintf(&ptr, "%x.", ip6[i]&0xf)
+			fmt.Fprintf(&ptr, "%x.", ip6[i]>>4)
+		}
+		fmt.Fprintf(&ptr, "ip6.arpa. %d IN PTR %s", v.Hdr.Ttl, v.Hdr.Name)
+		if err := s.config.Cache.AddRR(req.RR, req.Permanent); err != nil {
+			return err
+		}
+		if err := s.config.Cache.AddRR(ptr.String(), req.Permanent); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return fmt.Errorf("Cant create PTR record - invalid RR")
+	}
 }
 
 type CacheDeleteReq struct {
