@@ -88,7 +88,7 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 	// Start flush cache goroutine
 	go func() {
 		for {
-			time.Sleep(time.Second * 30)
+			time.Sleep(proxy_config.CacheFlush)
 			total, expired := proxy_config.Cache.Flush()
 			log.Printf("Cache: %d/%d (total/expired)", total, expired)
 		}

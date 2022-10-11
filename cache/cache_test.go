@@ -95,7 +95,7 @@ func TestExpire(t *testing.T) {
 
 	// Insert entries
 	for i := 0; i < 100; i++ {
-		msg, err := createCacheItem(fmt.Sprintf("%04d.test.com", i), "A", "0001.test.com. 60 IN A 1.2.3.4")
+		msg, err := createCacheItem(fmt.Sprintf("%04d.test.com", i), "A", fmt.Sprintf("%04d.test.com. 60 IN A 1.2.3.4", i))
 		if err != nil {
 			t.Error(err)
 		}
@@ -129,7 +129,7 @@ func TestConcurrent(t *testing.T) {
 
 	go func() {
 		for i := 0; i < 100000; i++ {
-			msg, _ := createCacheItem(fmt.Sprintf("%08d.test.com", i), "A", "0001.test.com. 5 IN A 1.2.3.4")
+			msg, _ := createCacheItem(fmt.Sprintf("%08d.test.com", i), "A", fmt.Sprintf("%08d.test.com. 5 IN A 1.2.3.4", i))
 			cache.Add(msg)
 		}
 		wg.Done()

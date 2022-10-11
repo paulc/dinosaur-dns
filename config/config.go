@@ -17,6 +17,7 @@ type ProxyConfig struct {
 	Upstream        []string
 	UpstreamErr     int
 	Cache           *cache.DNSCache
+	CacheFlush      time.Duration
 	BlockList       *blocklist.BlockList
 	Acl             []net.IPNet
 	Dns64           bool
@@ -39,6 +40,7 @@ func NewProxyConfig() *ProxyConfig {
 		Upstream:        make([]string, 0),
 		Acl:             make([]net.IPNet, 0),
 		Cache:           cache.New(),
+		CacheFlush:      30 * time.Second,
 		BlockList:       blocklist.New(),
 		Dns64Prefix:     net.IPNet{IP: net.ParseIP("64:ff9b::"), Mask: net.CIDRMask(96, 128)},
 		ApiBind:         "127.0.0.1:8553",
