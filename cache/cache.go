@@ -49,12 +49,7 @@ func New() *DNSCache {
 	return &DNSCache{Cache: make(map[DNSCacheKey]DNSCacheItem)}
 }
 
-func (c *DNSCache) AddRR(entry string, permanent bool) error {
-
-	rr, err := dns.NewRR(entry)
-	if err != nil {
-		return fmt.Errorf("Error creating RR: %s", err)
-	}
+func (c *DNSCache) AddRR(rr dns.RR, permanent bool) error {
 
 	if rr == nil {
 		// No RR
@@ -83,6 +78,14 @@ func (c *DNSCache) AddRR(entry string, permanent bool) error {
 	c.Cache[key] = val
 
 	return nil
+}
+
+func (c *DNSCache) AddRRString(entry string, permanent bool) error {
+	rr, err := dns.NewRR(entry)
+	if err != nil {
+		return fmt.Errorf("Error creating RR: %s", err)
+	}
+	return c.AddRR(rr, permanent)
 }
 
 func (c *DNSCache) Add(msg *dns.Msg) {

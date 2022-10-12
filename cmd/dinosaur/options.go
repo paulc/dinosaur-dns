@@ -48,11 +48,11 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var blocklistHostsFlag util.MultiFlag
 	flag.Var(&blocklistHostsFlag, "blocklist-from-hosts", "Blocklist from /etc/hosts format file")
 
-	var localFlag util.MultiFlag
-	flag.Var(&localFlag, "local", "Local DNS resource record")
+	var localRRFlag util.MultiFlag
+	flag.Var(&localRRFlag, "localrr", "Local DNS resource record")
 
 	var localZoneFlag util.MultiFlag
-	flag.Var(&localZoneFlag, "localzone", "Local DNS resource record file")
+	flag.Var(&localZoneFlag, "localzone", "Local DNS zone file")
 
 	var aclFlag util.MultiFlag
 	flag.Var(&aclFlag, "acl", "Access control list (CIDR)")
@@ -95,8 +95,8 @@ func GetUserConfig() (*config.UserConfig, error) {
 	}
 
 	// Local cache entries
-	for _, v := range localFlag {
-		user_config.Local = append(user_config.Local, v)
+	for _, v := range localRRFlag {
+		user_config.LocalRR = append(user_config.LocalRR, v)
 	}
 
 	// Local zonefile cache entries

@@ -24,7 +24,7 @@ type UserConfig struct {
 	Blocklist          []string `json:"blocklist"`
 	BlocklistAAAA      []string `json:"blocklist-aaaa"`
 	BlocklistFromHosts []string `json:"blocklist-from-hosts"`
-	Local              []string `json:"local"`
+	LocalRR            []string `json:"localrr"`
 	Localzone          []string `json:"localzone"`
 	Dns64              bool     `json:"dns64"`
 	Dns64Prefix        string   `json:"dns64-prefix"`
@@ -48,7 +48,7 @@ func NewUserConfig() *UserConfig {
 		Blocklist:          make([]string, 0),
 		BlocklistAAAA:      make([]string, 0),
 		BlocklistFromHosts: make([]string, 0),
-		Local:              make([]string, 0),
+		LocalRR:            make([]string, 0),
 		Localzone:          make([]string, 0),
 	}
 }
@@ -82,20 +82,23 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	}
 
 	// Local RRs
-	for _, v := range user_config.Local {
-		if err := config.Cache.AddRR(v, true); err != nil {
+	for _, v := range user_config.LocalRR {
+		if err := config.Cache.AddRRString(v, true); err != nil {
 			return err
 		}
 	}
 
-	// Local RR file/url
+	// Local zone file/url
 	for _, v := range user_config.Localzone {
-		if _, err := util.URLReader(v, func(line string) error {
-			if line == "" || line[0] == '#' {
-				return nil
-			}
-			return config.Cache.AddRR(line, true)
-		}); err != nil {
+		f, err := util.UrlOpen(v)
+		if err != nil {
+			return err
+		}
+		zp := dns.NewZoneParser(f, ".", "")
+		for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
+			config.Cache.AddRR(rr, true)
+		}
+		if err := zp.Err(); err != nil {
 			return err
 		}
 	}

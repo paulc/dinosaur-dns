@@ -74,5 +74,26 @@ func TestLogger(t *testing.T) {
 			t.Errorf("Log Error: %d %s", i, buf[i])
 		}
 	}
+}
 
+func TestStderr(T *testing.T) {
+	log := New(NewStderr(false))
+	log.Debug("debug")
+	log.Info("info")
+	log.Error("error")
+}
+
+func TestStderrDebug(T *testing.T) {
+
+	log := New(NewStderr(true))
+	log.Debug("debug")
+	log.Info("info")
+	log.Error("error")
+}
+
+func TestSyslog(T *testing.T) {
+	log := New(NewStderr(true))
+	log.Debug("debug")
+	log.Info("info")
+	log.Error("error")
 }

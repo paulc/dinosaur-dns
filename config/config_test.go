@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,11 +25,12 @@ var json_config = `
   ],
   "blocklist-from-hosts": [
   ],
-  "local": [
+  "localrr": [
   	"abcd.local. 60 IN A 1.2.3.4",
   	"abcd2.local. 60 IN A 1.2.3.4"
   ],
   "localzone": [
+  	"testdata/local.zone"
   ],
   "acl": [
     "127.0.0.1/32", "::1/128"
@@ -84,7 +86,7 @@ func TestUserConfig(t *testing.T) {
 	testFunc(t, "ListenAddr", c.ListenAddr, func(v []string) bool { return len(v) >= 3 })
 	testCount(t, "Upstream", c.Upstream, 3)
 	testCount(t, "Acl", c.Acl, 2)
-	testValue(t, "Cache", len(c.Cache.Cache), 2)
+	testValue(t, "Cache", len(c.Cache.Cache), 6)
 	testValue(t, "Blocklist Count", c.BlockList.Count(), 2)
 	testValue(t, "Dns64", c.Dns64, true)
 	testValue(t, "Dns64Prefix", c.Dns64Prefix.String(), "1111::/96")
@@ -93,4 +95,10 @@ func TestUserConfig(t *testing.T) {
 	testValue(t, "Api", c.Api, true)
 	testValue(t, "ApiBind", c.ApiBind, "127.0.0.1:9999")
 
+	for _, v := range []string{"abcd.local.:A", "abcd2.local.:A", "aaa.abcd.local.:A", "aaa.abcd.local.:AAAA", "aaa.abcd.local.:TXT", "xxx.yyy.local.:A"} {
+		s := strings.Split(v, ":")
+		if _, ok := c.Cache.GetName(s[0], s[1]); !ok {
+			t.Errorf("Cache Not Found: %s", v)
+		}
+	}
 }

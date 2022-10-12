@@ -1,0 +1,9 @@
+; Test zone file
+
+$ORIGIN abcd.local.
+
+aaa     60  IN  A       1.2.3.4
+aaa     60  IN  AAAA    ::1
+aaa     60  IN  TXT     "text"
+
+xxx.yyy.local.  60  IN  A 1.2.3.4

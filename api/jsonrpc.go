@@ -34,7 +34,7 @@ type CacheAddReq struct {
 }
 
 func (s *ApiService) CacheAdd(r *http.Request, req *CacheAddReq, res *Empty) error {
-	return s.config.Cache.AddRR(req.RR, req.Permanent)
+	return s.config.Cache.AddRRString(req.RR, req.Permanent)
 }
 
 // Add RR and associated PTR
@@ -51,10 +51,10 @@ func (s *ApiService) CacheAddWithPtr(r *http.Request, req *CacheAddReq, res *Emp
 			fmt.Fprintf(&ptr, "%d.", ip4[i])
 		}
 		fmt.Fprintf(&ptr, "in-addr.arpa. %d IN PTR %s", v.Hdr.Ttl, v.Hdr.Name)
-		if err := s.config.Cache.AddRR(req.RR, req.Permanent); err != nil {
+		if err := s.config.Cache.AddRRString(req.RR, req.Permanent); err != nil {
 			return err
 		}
-		if err := s.config.Cache.AddRR(ptr.String(), req.Permanent); err != nil {
+		if err := s.config.Cache.AddRRString(ptr.String(), req.Permanent); err != nil {
 			return err
 		}
 		return nil
@@ -66,10 +66,10 @@ func (s *ApiService) CacheAddWithPtr(r *http.Request, req *CacheAddReq, res *Emp
 			fmt.Fprintf(&ptr, "%x.", ip6[i]>>4)
 		}
 		fmt.Fprintf(&ptr, "ip6.arpa. %d IN PTR %s", v.Hdr.Ttl, v.Hdr.Name)
-		if err := s.config.Cache.AddRR(req.RR, req.Permanent); err != nil {
+		if err := s.config.Cache.AddRRString(req.RR, req.Permanent); err != nil {
 			return err
 		}
-		if err := s.config.Cache.AddRR(ptr.String(), req.Permanent); err != nil {
+		if err := s.config.Cache.AddRRString(ptr.String(), req.Permanent); err != nil {
 			return err
 		}
 		return nil
