@@ -16,12 +16,16 @@ var json_config = `
     "1.1.1.1","8.8.8.8","https://cloudflare-dns.com/dns-query"
   ],
   "block": [
-	"block.com","aaaa.block.com:AAAA", "delete.block.com"
+	"block.local","aaaa.block.local:AAAA", "cccc.block.local"
   ],
   "block-delete": [
-    "delete.block.com"
+    "blocklist-remove.local"
+  ],
+  "blocklist": [
+    "testdata/block.txt"
   ],
   "blocklist-aaaa": [
+    "testdata/block-aaaa.txt"
   ],
   "blocklist-from-hosts": [
   ],
@@ -87,7 +91,7 @@ func TestUserConfig(t *testing.T) {
 	testCount(t, "Upstream", c.Upstream, 3)
 	testCount(t, "Acl", c.Acl, 2)
 	testValue(t, "Cache", len(c.Cache.Cache), 6)
-	testValue(t, "Blocklist Count", c.BlockList.Count(), 2)
+	testValue(t, "Blocklist Count", c.BlockList.Count(), 7)
 	testValue(t, "Dns64", c.Dns64, true)
 	testValue(t, "Dns64Prefix", c.Dns64Prefix.String(), "1111::/96")
 	testValue(t, "Refresh", c.Refresh, true)

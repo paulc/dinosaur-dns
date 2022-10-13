@@ -1,0 +1,4 @@
+
+# AAAA blocklist
+
+aaaa.local

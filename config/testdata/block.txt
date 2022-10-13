@@ -1,0 +1,14 @@
+
+
+# Blocklist
+
+aaaa.blocklist.local
+bbbb.blocklist.local
+cccc.blocklist.local
+
+
+# We delete these using block-delete
+
+aaaa.blocklist-remove.local
+bbbb.blocklist-remove.local
+cccc.blocklist-remove.local
