@@ -5,55 +5,72 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/util"
 )
 
-type ConnPoolItem struct {
+type DnsConnPool struct {
 	Client dns.Client
 	Conn   *dns.Conn
 	Error  error
 }
 
+const retryLimit int = 3
+
+func dotQuery(pool *sync.Pool, q *dns.Msg) (r *dns.Msg, rtt time.Duration, err error) {
+
+	for retries := 0; retries < retryLimit; {
+
+		c := pool.Get().(*DnsConnPool)
+		if c.Error != nil {
+			// Try again
+			continue
+		}
+		r, rtt, err = c.Client.ExchangeWithConn(q, c.Conn)
+		switch {
+		case err == nil:
+			pool.Put(c)
+			return
+		case errors.Is(err, net.ErrClosed):
+			fmt.Println("Connection Error", err)
+		default:
+			return
+		}
+		retries++
+	}
+	return
+
+}
+
 func main() {
 
-	var connPool = &sync.Pool{
+	var dnsPool = &sync.Pool{
 		New: func() any {
-			poolItem := &ConnPoolItem{
+			p := &DnsConnPool{
 				Client: dns.Client{
 					Net: "tcp-tls",
 				},
 			}
-			poolItem.Conn, poolItem.Error = poolItem.Client.Dial("1.1.1.1:853")
-			return poolItem
+			p.Conn, p.Error = p.Client.Dial("1.1.1.1:853")
+			return p
 		},
 	}
 
 	q := util.CreateQuery("www.google.com", "A")
 
 	for i := 0; i < 5; i++ {
-		for count, done := 0, false; !done && count < 3; {
-			c := connPool.Get().(*ConnPoolItem)
-			if c.Error != nil {
-				continue
-			}
-			if i == 2 { // && count == 0 {
-				c.Conn.Close()
-			}
-			_, rtt, err := c.Client.ExchangeWithConn(q, c.Conn)
-			switch {
-			case err == nil:
-				fmt.Println(i, "OK", rtt)
-				connPool.Put(c)
-				done = true
-			case errors.Is(err, net.ErrClosed):
-				fmt.Println(i, "Connection Error")
-			default:
-				fmt.Println(err)
-				done = true
-			}
-			count++
+		if i == 3 || i == 0 {
+			c := dnsPool.Get().(*DnsConnPool)
+			c.Conn.Close()
+			dnsPool.Put(c)
+		}
+		_, rtt, err := dotQuery(dnsPool, q)
+		if err != nil {
+			fmt.Println(i, err)
+		} else {
+			fmt.Println(i, rtt)
 		}
 	}
 }
