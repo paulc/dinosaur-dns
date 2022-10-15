@@ -22,9 +22,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
 	var refreshFlag = flag.Bool("refresh", false, "Auto refresh blocklist (default: false)")
 	var refreshIntervalFlag = flag.String("refresh-interval", "", "Blocklist refresh interval (default: 24hrs)")
-	var debugFlag = flag.Bool("debug", false, "Discard logs (default: false)")
+	var debugFlag = flag.Bool("debug", false, "Debug log (default: false)")
 	var syslogFlag = flag.Bool("syslog", false, "Use syslog (default: false)")
-	var discardFlag = flag.Bool("discard", false, "Debug logging (default: false)")
+	var discardFlag = flag.Bool("discard", false, "Discard log (default: false)")
 	var setuidFlag = flag.String("setuid", "", "Setuid/Setgid user[:group] (default: none)")
 
 	var listenFlag util.MultiFlag
@@ -166,7 +166,7 @@ func GetUserConfig() (*config.UserConfig, error) {
 		user_config.Listen = append(user_config.Listen, "lo0:8053")
 	}
 	if len(user_config.Upstream) == 0 {
-		user_config.Upstream = append(user_config.Upstream, "https://cloudflare-dns.com/dns-query")
+		user_config.Upstream = append(user_config.Upstream, "tls://1.1.1.1:853", "tls://1.0.0.1:853")
 	}
 
 	return user_config, nil
