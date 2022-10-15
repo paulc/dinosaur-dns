@@ -9,6 +9,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
 	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/util"
 )
 
@@ -61,7 +62,7 @@ func (t *TestResponseWriter) Hijack() {
 func TestHandlerSimple(t *testing.T) {
 
 	c := config.NewProxyConfig()
-	c.Upstream = []string{"1.1.1.1:53"}
+	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
 	handler := MakeHandler(c)

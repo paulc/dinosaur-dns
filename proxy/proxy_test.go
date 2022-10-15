@@ -5,6 +5,7 @@ import (
 
 	"github.com/paulc/dinosaur-dns/config"
 	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/util"
 )
 
@@ -31,7 +32,7 @@ func TestDohRequest(t *testing.T) {
 func TestResolve(t *testing.T) {
 
 	c := config.NewProxyConfig()
-	c.Upstream = []string{"1.1.1.1:53"}
+	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
 	out, err, cached := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
@@ -48,7 +49,7 @@ func TestResolve(t *testing.T) {
 func TestResolveCached(t *testing.T) {
 
 	c := config.NewProxyConfig()
-	c.Upstream = []string{"1.1.1.1:53"}
+	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
 	_, err, _ := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
@@ -71,7 +72,7 @@ func TestResolveCached(t *testing.T) {
 func TestResolveInvalidUpstream(t *testing.T) {
 
 	c := config.NewProxyConfig()
-	c.Upstream = []string{"0.0.0.0:53", "1.1.1.1:53"}
+	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("0.0.0.0:53"), resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
 	out, err, cached := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
@@ -91,7 +92,7 @@ func TestResolveInvalidUpstream(t *testing.T) {
 	resolve(c, util.CreateQuery("127.0.0.3.nip.io.", "A"))
 	resolve(c, util.CreateQuery("127.0.0.4.nip.io.", "A"))
 
-	if c.Upstream[0] != "1.1.1.1:53" {
+	if c.Upstream[0].(*resolver.UdpResolver).Upstream != "1.1.1.1:53" {
 		t.Errorf("Error: Should have demoted invalid upstream")
 	}
 }

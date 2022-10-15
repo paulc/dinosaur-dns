@@ -11,6 +11,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/util"
 	"golang.org/x/sys/unix"
 )
@@ -73,7 +74,11 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
 			v += ":53"
 		}
-		config.Upstream = append(config.Upstream, v)
+		if strings.HasPrefix(v, "https://") {
+			config.Upstream = append(config.Upstream, resolver.NewDohResolver(v))
+		} else {
+			config.Upstream = append(config.Upstream, resolver.NewUdpResolver(v))
+		}
 	}
 
 	// Generate blocklist

@@ -118,7 +118,7 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 	}
 
 	log.Printf("Started server: %s", strings.Join(proxy_config.ListenAddr, " "))
-	log.Printf("Upstream: %s", strings.Join(proxy_config.Upstream, " "))
+	// XXX log.Printf("Upstream: %s", strings.Join(proxy_config.Upstream, " "))
 	log.Printf("Blocklist: %d entries", proxy_config.BlockList.Count())
 	log.Printf("ACL: %s", strings.Join(AclToString(proxy_config.Acl), " "))
 

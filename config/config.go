@@ -8,13 +8,14 @@ import (
 	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/cache"
 	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
 type ProxyConfig struct {
 	sync.RWMutex
 	ListenAddr      []string
-	Upstream        []string
+	Upstream        []resolver.Resolver
 	UpstreamErr     int
 	Cache           *cache.DNSCache
 	CacheFlush      time.Duration
@@ -37,7 +38,7 @@ type ProxyConfig struct {
 func NewProxyConfig() *ProxyConfig {
 	return &ProxyConfig{
 		ListenAddr:      make([]string, 0),
-		Upstream:        make([]string, 0),
+		Upstream:        make([]resolver.Resolver, 0),
 		Acl:             make([]net.IPNet, 0),
 		Cache:           cache.New(),
 		CacheFlush:      30 * time.Second,

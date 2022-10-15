@@ -10,6 +10,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
 	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/util"
 )
 
@@ -21,7 +22,7 @@ func TestServerDNS(t *testing.T) {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.ListenAddr = []string{"127.0.0.1:8053"}
-		proxy_config.Upstream = []string{"1.1.1.1:53"}
+		proxy_config.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 		proxy_config.Log = logger.New(logger.NewDiscard(false))
 
 		ctx, cancelCtx := context.WithCancel(context.Background())
@@ -52,7 +53,7 @@ func TestServerDOH(t *testing.T) {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.ListenAddr = []string{"127.0.0.1:8054"}
-		proxy_config.Upstream = []string{"https://cloudflare-dns.com/dns-query"}
+		proxy_config.Upstream = []resolver.Resolver{resolver.NewDohResolver("https://cloudflare-dns.com/dns-query")}
 		proxy_config.Log = logger.New(logger.NewDiscard(false))
 
 		ctx, cancelCtx := context.WithCancel(context.Background())

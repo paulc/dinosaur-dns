@@ -20,28 +20,28 @@ type DnsConnPool struct {
 const retryLimit int = 3
 
 func dotQuery(pool *sync.Pool, q *dns.Msg) (r *dns.Msg, rtt time.Duration, err error) {
-
 	for retries := 0; retries < retryLimit; {
-
 		c := pool.Get().(*DnsConnPool)
 		if c.Error != nil {
 			// Try again
 			continue
 		}
 		r, rtt, err = c.Client.ExchangeWithConn(q, c.Conn)
-		switch {
-		case err == nil:
+		if err == nil {
 			pool.Put(c)
 			return
-		case errors.Is(err, net.ErrClosed):
-			fmt.Println("Connection Error", err)
-		default:
+		} else if errors.Is(err, net.ErrClosed) {
+			// retry
+			fmt.Println(err)
+			retries++
+			continue
+		} else {
+			// return error
 			return
 		}
-		retries++
 	}
+	// retryLimit reached - return err
 	return
-
 }
 
 func main() {

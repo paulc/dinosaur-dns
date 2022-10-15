@@ -115,11 +115,14 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 	// Try each resolver
 	for i, resolver := range config.Upstream {
 
-		if strings.HasPrefix(resolver, "https://") {
-			out, err = dohRequest(q, resolver)
-		} else {
-			out, err = dnsRequest(q, resolver)
-		}
+		out, err = resolver.Resolve(q)
+		/*
+			if strings.HasPrefix(resolver, "https://") {
+				out, err = dohRequest(q, resolver)
+			} else {
+				out, err = dnsRequest(q, resolver)
+			}
+		*/
 
 		if err == nil {
 			// If this is the first upstream clear the error count
@@ -143,7 +146,7 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
 				config.UpstreamErr = 0
 				config.Unlock()
-				log.Printf("Error threshold exceeded - demoting upstream: %s", strings.Join(config.Upstream, " "))
+				log.Printf("Error threshold exceeded - demoting upstream: %s", config.Upstream)
 			}
 
 		}
