@@ -13,7 +13,7 @@ var json_config = `
   	"lo0", "127.0.0.1:8053", "[::1]:8053"
   ],
   "upstream": [
-    "1.1.1.1","8.8.8.8","https://cloudflare-dns.com/dns-query"
+	"1.1.1.1","8.8.8.8","https://cloudflare-dns.com/dns-query", "tls://1.1.1.1"
   ],
   "block": [
 	"block.local","aaaa.block.local:AAAA", "cccc.block.local"
@@ -88,7 +88,7 @@ func TestUserConfig(t *testing.T) {
 	}
 
 	testFunc(t, "ListenAddr", c.ListenAddr, func(v []string) bool { return len(v) >= 3 })
-	testCount(t, "Upstream", c.Upstream, 3)
+	testCount(t, "Upstream", c.Upstream, 4)
 	testCount(t, "Acl", c.Acl, 2)
 	testValue(t, "Cache", len(c.Cache.Cache), 6)
 	testValue(t, "Blocklist Count", c.BlockList.Count(), 7)

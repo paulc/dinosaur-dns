@@ -117,11 +117,18 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		go api.MakeApiHandler(proxy_config)()
 	}
 
+	upstream := make([]string, len(proxy_config.Upstream))
+	for i, v := range proxy_config.Upstream {
+		upstream[i] = v.String()
+	}
+
 	log.Printf("Started server: %s", strings.Join(proxy_config.ListenAddr, " "))
-	// XXX log.Printf("Upstream: %s", strings.Join(proxy_config.Upstream, " "))
+	log.Printf("Upstream: %s", strings.Join(upstream, " "))
 	log.Printf("Blocklist: %d entries", proxy_config.BlockList.Count())
 	log.Printf("ACL: %s", strings.Join(AclToString(proxy_config.Acl), " "))
 
+	// Make sure servers are listening
+	time.Sleep(100 * time.Millisecond)
 	ready <- true
 
 	// Wait

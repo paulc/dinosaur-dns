@@ -77,7 +77,7 @@ func TestHandlerUpstreamDNS(t *testing.T) {
 
 	user_config := config.NewUserConfig()
 	if err := json.Unmarshal([]byte(`{
-		"upstream": [ "1.1.1.1" ],
+		"upstream": [ "1.1.1.1", "1.0.0.1" ],
 		"discard": true
 	}`), user_config); err != nil {
 		t.Fatal(err)

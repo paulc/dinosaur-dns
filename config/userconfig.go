@@ -70,13 +70,18 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 
 	// Upstream resolvers
 	for _, v := range user_config.Upstream {
-		// Add default port if not specified for non DoH
-		if !strings.HasPrefix(v, "https://") && !regexp.MustCompile(`:\d+$`).MatchString(v) {
-			v += ":53"
-		}
-		if strings.HasPrefix(v, "https://") {
+		switch {
+		case strings.HasPrefix(v, "https://"):
 			config.Upstream = append(config.Upstream, resolver.NewDohResolver(v))
-		} else {
+		case strings.HasPrefix(v, "tls://"):
+			if !regexp.MustCompile(`:\d+$`).MatchString(v) {
+				v += ":853"
+			}
+			config.Upstream = append(config.Upstream, resolver.NewDotResolver(v))
+		default:
+			if !regexp.MustCompile(`:\d+$`).MatchString(v) {
+				v += ":53"
+			}
 			config.Upstream = append(config.Upstream, resolver.NewUdpResolver(v))
 		}
 	}

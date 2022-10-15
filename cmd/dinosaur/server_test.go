@@ -76,6 +76,37 @@ func TestServerDOH(t *testing.T) {
 	}
 }
 
+func TestServerDOT(t *testing.T) {
+
+	// Dont run on Github CI
+	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
+	if !isGH {
+
+		proxy_config := config.NewProxyConfig()
+		proxy_config.ListenAddr = []string{"127.0.0.1:8055"}
+		proxy_config.Upstream = []resolver.Resolver{resolver.NewDotResolver("tls://1.1.1.1:853")}
+		proxy_config.Log = logger.New(logger.NewDiscard(false))
+
+		ctx, cancelCtx := context.WithCancel(context.Background())
+		ready := make(chan bool)
+
+		go StartServer(ctx, proxy_config, ready)
+
+		// Wait for server to start
+		<-ready
+
+		m := util.CreateQuery("127.0.0.1.nip.io", "A")
+
+		c := &dns.Client{}
+		in, _, err := c.Exchange(m, "127.0.0.1:8055")
+		if err != nil {
+			t.Fatal(err)
+		}
+		util.CheckResponse(t, in, "127.0.0.1")
+		cancelCtx()
+	}
+}
+
 // Note - this test is timing dependent so might be sensitive to system load
 func TestCacheFlush(t *testing.T) {
 

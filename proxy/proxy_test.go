@@ -14,7 +14,6 @@ func TestDnsRequest(t *testing.T) {
 	out, err := dnsRequest(util.CreateQuery("127.0.0.1.nip.io.", "A"), "1.1.1.1:53")
 	if err != nil {
 		t.Fatal(err)
-		return
 	}
 	util.CheckResponse(t, out, "127.0.0.1")
 }
@@ -24,7 +23,6 @@ func TestDohRequest(t *testing.T) {
 	out, err := dohRequest(util.CreateQuery("127.0.0.1.nip.io.", "A"), "https://cloudflare-dns.com/dns-query")
 	if err != nil {
 		t.Fatal(err)
-		return
 	}
 	util.CheckResponse(t, out, "127.0.0.1")
 }
@@ -92,7 +90,7 @@ func TestResolveInvalidUpstream(t *testing.T) {
 	resolve(c, util.CreateQuery("127.0.0.3.nip.io.", "A"))
 	resolve(c, util.CreateQuery("127.0.0.4.nip.io.", "A"))
 
-	if c.Upstream[0].(*resolver.UdpResolver).Upstream != "1.1.1.1:53" {
+	if c.Upstream[0].String() != "1.1.1.1:53" {
 		t.Errorf("Error: Should have demoted invalid upstream")
 	}
 }
