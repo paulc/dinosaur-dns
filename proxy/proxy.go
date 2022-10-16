@@ -150,7 +150,7 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 			}
 
 		}
-		log.Printf("Upstream error <%s>: %s", resolver, err)
+		log.Debugf("Upstream error <%s>: %s", resolver, err)
 	}
 
 	// None of the resolvers worked
