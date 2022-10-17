@@ -10,11 +10,12 @@ import (
 	"sync"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur-dns/logger"
 )
 
 // Interface for resolver instances
 type Resolver interface {
-	Resolve(r *dns.Msg) (*dns.Msg, error)
+	Resolve(log *logger.Logger, r *dns.Msg) (*dns.Msg, error)
 	String() string
 }
 
@@ -23,7 +24,7 @@ type UdpResolver struct {
 	Upstream string
 }
 
-func (r *UdpResolver) Resolve(q *dns.Msg) (*dns.Msg, error) {
+func (r *UdpResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) {
 	c := &dns.Client{}
 	out, _, err := c.Exchange(q, r.Upstream)
 	if err != nil {
@@ -53,7 +54,7 @@ type DotResolver struct {
 	RetryLimit int
 }
 
-func (r *DotResolver) Resolve(q *dns.Msg) (out *dns.Msg, err error) {
+func (r *DotResolver) Resolve(log *logger.Logger, q *dns.Msg) (out *dns.Msg, err error) {
 	for retries := 0; retries < r.RetryLimit; {
 		c := r.Pool.Get().(*dotConnPool)
 		if c.Error != nil {
@@ -107,7 +108,7 @@ type DohResolver struct {
 	Upstream string
 }
 
-func (r *DohResolver) Resolve(q *dns.Msg) (*dns.Msg, error) {
+func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) {
 
 	c := &http.Client{}
 

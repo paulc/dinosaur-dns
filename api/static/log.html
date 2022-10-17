@@ -49,7 +49,7 @@
           <tr>
             <td x-text="i.date.toUTCString()"></td>
             <td x-text="i.client"></td>
-            <td><span x-text="i.qname"></span><span style="cursor: pointer" x-on:click="(e) => api.call('api.BlockListAdd',{entries:[i.qname]})">&nbsp;🚫</span></td>
+            <td><span x-text="i.qname"></span>&nbsp;<span style="cursor: pointer" x-on:click="(e) => api.call('api.BlockListAdd',{entries:[i.qname]})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="red" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span></td>
             <td x-text="i.qtype"></td>
             <td x-text="rcodeToString[i.rcode]"></td>
             <td x-text="formatStatus(i)"></td>
