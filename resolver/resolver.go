@@ -59,6 +59,7 @@ func (r *DotResolver) Resolve(log *logger.Logger, q *dns.Msg) (out *dns.Msg, err
 		c := r.Pool.Get().(*dotConnPool)
 		if c.Error != nil {
 			// Dial failed - return
+			log.Debug("ConnPool Error:", err)
 			err = c.Error
 			return
 		}
@@ -69,10 +70,12 @@ func (r *DotResolver) Resolve(log *logger.Logger, q *dns.Msg) (out *dns.Msg, err
 			return
 		} else if errors.Is(err, net.ErrClosed) {
 			// connection closed - retry
+			log.Debug("ConnPool Closed - Retrying:", err)
 			retries++
 			continue
 		} else {
 			// return error
+			log.Debug("ConnPool Unexpected Error:", err)
 			return
 		}
 	}
