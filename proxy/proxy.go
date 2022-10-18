@@ -116,13 +116,6 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 	for i, resolver := range config.Upstream {
 
 		out, err = resolver.Resolve(log, q)
-		/*
-			if strings.HasPrefix(resolver, "https://") {
-				out, err = dohRequest(q, resolver)
-			} else {
-				out, err = dnsRequest(q, resolver)
-			}
-		*/
 
 		if err == nil {
 			// If this is the first upstream clear the error count

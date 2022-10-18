@@ -59,6 +59,8 @@ func (t *TestResponseWriter) TsigTimersOnly(bool) {
 func (t *TestResponseWriter) Hijack() {
 }
 
+// Tests
+
 func TestHandlerSimple(t *testing.T) {
 
 	c := config.NewProxyConfig()
@@ -73,11 +75,33 @@ func TestHandlerSimple(t *testing.T) {
 	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
 }
 
-func TestHandlerUpstreamDNS(t *testing.T) {
+func TestHandlerUpstreamUDP(t *testing.T) {
 
 	user_config := config.NewUserConfig()
 	if err := json.Unmarshal([]byte(`{
 		"upstream": [ "1.1.1.1", "1.0.0.1" ],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+}
+
+func TestHandlerUpstreamDOT(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "tls://1.1.1.1:853", "tls://1.0.0.1:853" ],
 		"discard": true
 	}`), user_config); err != nil {
 		t.Fatal(err)
@@ -164,5 +188,74 @@ func TestHandlerCache(t *testing.T) {
 
 	if _, ok := c.Cache.Get(q); !ok {
 		t.Errorf("Error getting query from cache")
+	}
+}
+
+func TestHandlerACL(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "1.1.1.1" ],
+		"acl":["127.0.0.1/32"],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+
+	// Try with different remote address - should fail and we get a nil reply
+	rw.remote = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 99), Port: 9999}
+	rw.outmsg = nil
+	rw.outbuf = bytes.Buffer{}
+
+	handler(rw, q)
+
+	if rw.outmsg != nil {
+		t.Errorf("Expected nil response: %s", rw.remote)
+	}
+}
+
+func TestHandlerACLV6(t *testing.T) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(`{
+		"upstream": [ "1.1.1.1" ],
+		"acl":["2000:abcd::/64"],
+		"discard": true
+	}`), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := MakeHandler(c)
+	rw := NewTestResponseWriter()
+	rw.remote = &net.UDPAddr{IP: net.IP{0x20, 0, 0xab, 0xcd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	handler(rw, q)
+
+	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+
+	// Try with different remote address - should fail and we get a nil reply
+	rw.remote = &net.UDPAddr{IP: net.IP{0x20, 0xff, 0xab, 0xcd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+	rw.outmsg = nil
+	rw.outbuf = bytes.Buffer{}
+
+	handler(rw, q)
+
+	if rw.outmsg != nil {
+		t.Errorf("Expected nil response: %s", rw.remote)
 	}
 }
