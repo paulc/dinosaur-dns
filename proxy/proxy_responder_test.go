@@ -8,8 +8,6 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
-	"github.com/paulc/dinosaur-dns/logger"
-	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/util"
 )
 
@@ -59,15 +57,29 @@ func (t *TestResponseWriter) TsigTimersOnly(bool) {
 func (t *TestResponseWriter) Hijack() {
 }
 
+// Utils
+
+func getTestHandler(t *testing.T, json_config string) (func(dns.ResponseWriter, *dns.Msg), *config.ProxyConfig) {
+
+	user_config := config.NewUserConfig()
+	if err := json.Unmarshal([]byte(json_config), user_config); err != nil {
+		t.Fatal(err)
+	}
+	c := config.NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+
+	return MakeHandler(c), c
+}
+
 // Tests
 
 func TestHandlerSimple(t *testing.T) {
 
-	c := config.NewProxyConfig()
-	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
-	c.Log = logger.New(logger.NewDiscard(false))
-
-	handler := MakeHandler(c)
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "1.1.1.1" ]
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -77,19 +89,10 @@ func TestHandlerSimple(t *testing.T) {
 
 func TestHandlerUpstreamUDP(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, _ := getTestHandler(t, `{
 		"upstream": [ "1.1.1.1", "1.0.0.1" ],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -99,19 +102,10 @@ func TestHandlerUpstreamUDP(t *testing.T) {
 
 func TestHandlerUpstreamDOT(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, _ := getTestHandler(t, `{
 		"upstream": [ "tls://1.1.1.1:853", "tls://1.0.0.1:853" ],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -121,19 +115,10 @@ func TestHandlerUpstreamDOT(t *testing.T) {
 
 func TestHandlerUpstreamDOH(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, _ := getTestHandler(t, `{
 		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -143,19 +128,10 @@ func TestHandlerUpstreamDOH(t *testing.T) {
 
 func TestHandlerUpstreamFail(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, _ := getTestHandler(t, `{
 		"upstream": [ "0.0.0.0" ],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -167,19 +143,10 @@ func TestHandlerUpstreamFail(t *testing.T) {
 
 func TestHandlerCache(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, c := getTestHandler(t, `{
 		"upstream": [ "1.1.1.1" ],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -193,20 +160,11 @@ func TestHandlerCache(t *testing.T) {
 
 func TestHandlerACL(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, _ := getTestHandler(t, `{
 		"upstream": [ "1.1.1.1" ],
 		"acl":["127.0.0.1/32"],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -227,21 +185,14 @@ func TestHandlerACL(t *testing.T) {
 
 func TestHandlerACLV6(t *testing.T) {
 
-	user_config := config.NewUserConfig()
-	if err := json.Unmarshal([]byte(`{
+	handler, _ := getTestHandler(t, `{
 		"upstream": [ "1.1.1.1" ],
 		"acl":["2000:abcd::/64"],
 		"discard": true
-	}`), user_config); err != nil {
-		t.Fatal(err)
-	}
-	c := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(c); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := MakeHandler(c)
+	}`)
 	rw := NewTestResponseWriter()
+
+	// Set remote address
 	rw.remote = &net.UDPAddr{IP: net.IP{0x20, 0, 0xab, 0xcd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
@@ -258,4 +209,33 @@ func TestHandlerACLV6(t *testing.T) {
 	if rw.outmsg != nil {
 		t.Errorf("Expected nil response: %s", rw.remote)
 	}
+}
+
+func TestHandlerDns64(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"dns64": true,
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	// Test with IPv4 client
+	q := util.CreateQuery("127.0.0.1.nip.io.", "AAAA")
+	handler(rw, q)
+
+	// Expect nil response
+	util.CheckResponseEmpty(t, rw.outmsg)
+
+	// Test with IPv6 client
+	rw.remote = &net.UDPAddr{IP: net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+	rw.outmsg = nil
+	rw.outbuf = bytes.Buffer{}
+
+	handler(rw, q)
+
+	// Expect DNS64 response
+	util.CheckResponse(t, rw.outmsg, "64:ff9b::7f00:1")
+
 }
