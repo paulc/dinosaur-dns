@@ -11,20 +11,22 @@ import (
 
 func TestDnsRequest(t *testing.T) {
 
-	out, err := dnsRequest(util.CreateQuery("127.0.0.1.nip.io.", "A"), "1.1.1.1:53")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	out, err := dnsRequest(q, "1.1.1.1:53")
 	if err != nil {
 		t.Fatal(err)
 	}
-	util.CheckResponse(t, out, "127.0.0.1")
+	util.CheckResponse(t, q, out, "127.0.0.1")
 }
 
 func TestDohRequest(t *testing.T) {
 
-	out, err := dohRequest(util.CreateQuery("127.0.0.1.nip.io.", "A"), "https://cloudflare-dns.com/dns-query")
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	out, err := dohRequest(q, "https://cloudflare-dns.com/dns-query")
 	if err != nil {
 		t.Fatal(err)
 	}
-	util.CheckResponse(t, out, "127.0.0.1")
+	util.CheckResponse(t, q, out, "127.0.0.1")
 }
 
 func TestResolve(t *testing.T) {
@@ -33,11 +35,12 @@ func TestResolve(t *testing.T) {
 	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
-	out, err, cached := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	out, err, cached := resolve(c, q)
 	if err != nil {
 		t.Fatal(err)
 	}
-	util.CheckResponse(t, out, "127.0.0.1")
+	util.CheckResponse(t, q, out, "127.0.0.1")
 
 	if cached == true {
 		t.Errorf("Error: cached")
@@ -50,17 +53,18 @@ func TestResolveCached(t *testing.T) {
 	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
-	_, err, _ := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	_, err, _ := resolve(c, q)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	out, err, cached := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
+	out, err, cached := resolve(c, q)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	util.CheckResponse(t, out, "127.0.0.1")
+	util.CheckResponse(t, q, out, "127.0.0.1")
 
 	if cached != true {
 		t.Errorf("Error: not cached")
@@ -73,12 +77,13 @@ func TestResolveInvalidUpstream(t *testing.T) {
 	c.Upstream = []resolver.Resolver{resolver.NewUdpResolver("0.0.0.0:53"), resolver.NewUdpResolver("1.1.1.1:53")}
 	c.Log = logger.New(logger.NewDiscard(false))
 
-	out, err, cached := resolve(c, util.CreateQuery("127.0.0.1.nip.io.", "A"))
+	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
+	out, err, cached := resolve(c, q)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	util.CheckResponse(t, out, "127.0.0.1")
+	util.CheckResponse(t, q, out, "127.0.0.1")
 
 	if cached == true {
 		t.Errorf("Error: cached")

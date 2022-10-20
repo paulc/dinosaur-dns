@@ -14,7 +14,7 @@ func CreateQuery(qname string, qtype string) *dns.Msg {
 	return msg
 }
 
-func CheckResponse(t *testing.T, msg *dns.Msg, expected string) {
+func CheckResponse(t *testing.T, q, msg *dns.Msg, expected string) {
 	if msg == nil {
 		t.Fatalf("Invalid DNS Response (Nil)")
 	}
@@ -42,23 +42,9 @@ func CheckResponse(t *testing.T, msg *dns.Msg, expected string) {
 	}
 	t.Error("Response not found: ", expected)
 
-	/*
-		switch v := msg.Answer[0].(type) {
-		case *dns.A:
-			if v.A.String() != expected {
-				t.Errorf("Invalid DNS response: %s", v.A)
-			}
-		case *dns.AAAA:
-			if v.AAAA.String() != expected {
-				t.Errorf("Invalid DNS response: %s", v.AAAA)
-			}
-		default:
-			t.Errorf("Unexpected RR type: %s", v)
-		}
-	*/
 }
 
-func CheckResponseEmpty(t *testing.T, msg *dns.Msg) {
+func CheckResponseEmpty(t *testing.T, q, msg *dns.Msg) {
 	if msg == nil {
 		t.Fatalf("Invalid DNS Response (Nil)")
 	}
@@ -70,6 +56,20 @@ func CheckResponseEmpty(t *testing.T, msg *dns.Msg) {
 	case dns.RcodeServerFailure:
 		t.Fatal("Upstream error (SRVFAIL) - check network?")
 	default:
-		t.Fatal("Invalid response", dns.RcodeToString[msg.Rcode])
+		t.Fatal("Invalid response", q.Question[0], dns.RcodeToString[msg.Rcode])
+	}
+}
+
+func CheckResponseNxdomain(t *testing.T, q, msg *dns.Msg) {
+	if msg == nil {
+		t.Fatalf("Invalid DNS Response (Nil)")
+	}
+	switch msg.Rcode {
+	case dns.RcodeNameError:
+		return
+	case dns.RcodeServerFailure:
+		t.Fatal("Upstream error (SRVFAIL) - check network?")
+	default:
+		t.Fatal("Invalid Rcode (expected NXDOMAIN)", q.Question[0], dns.RcodeToString[msg.Rcode])
 	}
 }

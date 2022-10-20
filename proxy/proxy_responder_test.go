@@ -57,6 +57,12 @@ func (t *TestResponseWriter) TsigTimersOnly(bool) {
 func (t *TestResponseWriter) Hijack() {
 }
 
+// For testing
+func (t *TestResponseWriter) Reset() {
+	t.outmsg = nil
+	t.outbuf = bytes.Buffer{}
+}
+
 // Utils
 
 func getTestHandler(t *testing.T, json_config string) (func(dns.ResponseWriter, *dns.Msg), *config.ProxyConfig) {
@@ -84,7 +90,7 @@ func TestHandlerSimple(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamUDP(t *testing.T) {
@@ -97,7 +103,7 @@ func TestHandlerUpstreamUDP(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamDOT(t *testing.T) {
@@ -110,7 +116,7 @@ func TestHandlerUpstreamDOT(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamDOH(t *testing.T) {
@@ -123,7 +129,7 @@ func TestHandlerUpstreamDOH(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 }
 
 func TestHandlerUpstreamFail(t *testing.T) {
@@ -151,7 +157,7 @@ func TestHandlerCache(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 
 	if _, ok := c.Cache.Get(q); !ok {
 		t.Errorf("Error getting query from cache")
@@ -169,7 +175,7 @@ func TestHandlerACL(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 
 	// Try with different remote address - should fail and we get a nil reply
 	rw.remote = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 99), Port: 9999}
@@ -197,7 +203,7 @@ func TestHandlerACLV6(t *testing.T) {
 	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
 	handler(rw, q)
 
-	util.CheckResponse(t, rw.outmsg, "127.0.0.1")
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
 
 	// Try with different remote address - should fail and we get a nil reply
 	rw.remote = &net.UDPAddr{IP: net.IP{0x20, 0xff, 0xab, 0xcd, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
@@ -226,7 +232,7 @@ func TestHandlerDns64(t *testing.T) {
 	handler(rw, q)
 
 	// Expect nil response
-	util.CheckResponseEmpty(t, rw.outmsg)
+	util.CheckResponseEmpty(t, q, rw.outmsg)
 
 	// Test with IPv6 client
 	rw.remote = &net.UDPAddr{IP: net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
@@ -236,6 +242,37 @@ func TestHandlerDns64(t *testing.T) {
 	handler(rw, q)
 
 	// Expect DNS64 response
-	util.CheckResponse(t, rw.outmsg, "64:ff9b::7f00:1")
+	util.CheckResponse(t, q, rw.outmsg, "64:ff9b::7f00:1")
+
+}
+
+func TestHandlerBlock(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"block": [ "block.local", "127.0.0.1.nip.io:AAAA" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	q := util.CreateQuery("block.local", "A")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+
+	rw.Reset()
+	q = util.CreateQuery("sub.block.local", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
 
 }

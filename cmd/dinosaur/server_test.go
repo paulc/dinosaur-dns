@@ -33,14 +33,14 @@ func TestServerDNS(t *testing.T) {
 		// Wait for server to start
 		<-ready
 
-		m := util.CreateQuery("127.0.0.1.nip.io", "A")
+		q := util.CreateQuery("127.0.0.1.nip.io", "A")
 
 		c := &dns.Client{}
-		in, _, err := c.Exchange(m, "127.0.0.1:8053")
+		in, _, err := c.Exchange(q, "127.0.0.1:8053")
 		if err != nil {
 			t.Fatal(err)
 		}
-		util.CheckResponse(t, in, "127.0.0.1")
+		util.CheckResponse(t, q, in, "127.0.0.1")
 		cancelCtx()
 	}
 }
@@ -64,14 +64,14 @@ func TestServerDOH(t *testing.T) {
 		// Wait for server to start
 		<-ready
 
-		m := util.CreateQuery("127.0.0.1.nip.io", "A")
+		q := util.CreateQuery("127.0.0.1.nip.io", "A")
 
 		c := &dns.Client{}
-		in, _, err := c.Exchange(m, "127.0.0.1:8054")
+		in, _, err := c.Exchange(q, "127.0.0.1:8054")
 		if err != nil {
 			t.Fatal(err)
 		}
-		util.CheckResponse(t, in, "127.0.0.1")
+		util.CheckResponse(t, q, in, "127.0.0.1")
 		cancelCtx()
 	}
 }
@@ -95,14 +95,14 @@ func TestServerDOT(t *testing.T) {
 		// Wait for server to start
 		<-ready
 
-		m := util.CreateQuery("127.0.0.1.nip.io", "A")
+		q := util.CreateQuery("127.0.0.1.nip.io", "A")
 
 		c := &dns.Client{}
-		in, _, err := c.Exchange(m, "127.0.0.1:8055")
+		in, _, err := c.Exchange(q, "127.0.0.1:8055")
 		if err != nil {
 			t.Fatal(err)
 		}
-		util.CheckResponse(t, in, "127.0.0.1")
+		util.CheckResponse(t, q, in, "127.0.0.1")
 		cancelCtx()
 	}
 }
