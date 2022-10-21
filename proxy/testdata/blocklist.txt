@@ -1,0 +1,6 @@
+
+# Bloccklist file
+
+block.local
+
+nip.io:AAAA

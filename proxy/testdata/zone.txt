@@ -1,0 +1,8 @@
+
+;; Example zone file 
+
+$ORIGIN local.
+$TTL 3600
+
+test1               A   1.2.3.4
+test2   123     IN  A   2.3.4.5

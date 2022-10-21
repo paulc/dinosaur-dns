@@ -217,6 +217,147 @@ func TestHandlerACLV6(t *testing.T) {
 	}
 }
 
+func TestHandlerBlock(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"block": [ "block.local", "nip.io:AAAA" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	q := util.CreateQuery("block.local", "A")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+
+	rw.Reset()
+	q = util.CreateQuery("sub.block.local", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+}
+
+func TestHandlerBlocklist(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"blocklist": [ "testdata/blocklist.txt" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	q := util.CreateQuery("block.local", "A")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+
+	rw.Reset()
+	q = util.CreateQuery("sub.block.local", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+}
+
+func TestHandlerBlocklistAAAA(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"blocklist-aaaa": [ "testdata/blocklist-aaaa.txt" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+	q := util.CreateQuery("127.0.0.1.nip.io", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
+
+	rw.Reset()
+	q = util.CreateQuery("127.0.0.1.nip.io", "AAAA")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+}
+
+func TestHandlerBlocklistHosts(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"blocklist-from-hosts": [ "testdata/blocklist-hosts.txt" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+	q := util.CreateQuery("127.0.0.1.nip.io", "A")
+	handler(rw, q)
+	util.CheckResponseNxdomain(t, q, rw.outmsg)
+}
+
+func TestHandlerLocalRR(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"localrr": [ "test1.local. A 1.2.3.4", "test2.local 123 A 2.3.4.5" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	q := util.CreateQuery("test1.local", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "1.2.3.4")
+
+	rw.Reset()
+	q = util.CreateQuery("test2.local", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "2.3.4.5")
+
+	if rw.outmsg.Answer[0].Header().Ttl != 123 {
+		t.Error("Invalid TTL", rw.outmsg.Answer[0].Header().Ttl)
+	}
+}
+
+func TestHandlerLocalzone(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"localzone": [ "testdata/zone.txt" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	q := util.CreateQuery("test1.local", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "1.2.3.4")
+
+	rw.Reset()
+	q = util.CreateQuery("test2.local", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "2.3.4.5")
+
+	if rw.outmsg.Answer[0].Header().Ttl != 123 {
+		t.Error("Invalid TTL", rw.outmsg.Answer[0].Header().Ttl)
+	}
+}
+
 func TestHandlerDns64(t *testing.T) {
 
 	handler, _ := getTestHandler(t, `{
@@ -243,36 +384,33 @@ func TestHandlerDns64(t *testing.T) {
 
 	// Expect DNS64 response
 	util.CheckResponse(t, q, rw.outmsg, "64:ff9b::7f00:1")
-
 }
 
-func TestHandlerBlock(t *testing.T) {
+func TestHandlerDns64Prefix(t *testing.T) {
 
 	handler, _ := getTestHandler(t, `{
 		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
-		"block": [ "block.local", "127.0.0.1.nip.io:AAAA" ],
+		"dns64": true,
+		"dns64-prefix": "1111::/96",
 		"discard": true
 	}`)
 
 	rw := NewTestResponseWriter()
 
-	q := util.CreateQuery("block.local", "A")
+	// Test with IPv4 client
+	q := util.CreateQuery("127.0.0.1.nip.io.", "AAAA")
 	handler(rw, q)
-	util.CheckResponseNxdomain(t, q, rw.outmsg)
 
-	rw.Reset()
-	q = util.CreateQuery("sub.block.local", "AAAA")
+	// Expect nil response
+	util.CheckResponseEmpty(t, q, rw.outmsg)
+
+	// Test with IPv6 client
+	rw.remote = &net.UDPAddr{IP: net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+	rw.outmsg = nil
+	rw.outbuf = bytes.Buffer{}
+
 	handler(rw, q)
-	util.CheckResponseNxdomain(t, q, rw.outmsg)
 
-	rw.Reset()
-	q = util.CreateQuery("127.0.0.1.nip.io", "A")
-	handler(rw, q)
-	util.CheckResponse(t, q, rw.outmsg, "127.0.0.1")
-
-	rw.Reset()
-	q = util.CreateQuery("127.0.0.1.nip.io", "AAAA")
-	handler(rw, q)
-	util.CheckResponseNxdomain(t, q, rw.outmsg)
-
+	// Expect DNS64 response
+	util.CheckResponse(t, q, rw.outmsg, "1111::7f00:1")
 }
