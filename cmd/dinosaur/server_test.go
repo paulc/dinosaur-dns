@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -17,8 +16,7 @@ import (
 func TestServerDNS(t *testing.T) {
 
 	// Dont run on Github CI
-	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
-	if !isGH {
+	if !util.IsGH() {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.ListenAddr = []string{"127.0.0.1:8053"}
@@ -48,8 +46,7 @@ func TestServerDNS(t *testing.T) {
 func TestServerDOH(t *testing.T) {
 
 	// Dont run on Github CI
-	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
-	if !isGH {
+	if !util.IsGH() {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.ListenAddr = []string{"127.0.0.1:8054"}
@@ -79,8 +76,7 @@ func TestServerDOH(t *testing.T) {
 func TestServerDOT(t *testing.T) {
 
 	// Dont run on Github CI
-	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
-	if !isGH {
+	if !util.IsGH() {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.ListenAddr = []string{"127.0.0.1:8055"}
@@ -113,8 +109,7 @@ func TestCacheFlush(t *testing.T) {
 	const n int = 5
 
 	// Dont run on Github CI
-	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
-	if !isGH {
+	if !util.IsGH() {
 
 		proxy_config := config.NewProxyConfig()
 		proxy_config.CacheFlush = 500 * time.Millisecond

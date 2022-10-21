@@ -4,7 +4,6 @@ package util
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"testing"
 )
@@ -65,8 +64,7 @@ func TestSplitId(t *testing.T) {
 			t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
 		}
 	}
-	_, isGH := os.LookupEnv("GITHUB_ACTIONS")
-	if !isGH {
+	if !IsGH() {
 		for _, v := range []string{"nobody:nobody"} {
 			uid, gid, err := SplitId(v)
 			if err != nil {

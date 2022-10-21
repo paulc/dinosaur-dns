@@ -1,6 +1,7 @@
 package util
 
 import (
+	"os"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -72,4 +73,9 @@ func CheckResponseNxdomain(t *testing.T, q, msg *dns.Msg) {
 	default:
 		t.Fatal("Invalid Rcode (expected NXDOMAIN)", q.Question[0], dns.RcodeToString[msg.Rcode])
 	}
+}
+
+func IsGH() bool {
+	_, found := os.LookupEnv("GITHUB_ACTIONS")
+	return found
 }
