@@ -13,7 +13,7 @@ import (
 	"github.com/paulc/dinosaur-dns/util"
 )
 
-func TestServerDNS(t *testing.T) {
+func TestServerUDP(t *testing.T) {
 
 	// Dont run on Github CI
 	if !util.IsGH() {
@@ -39,6 +39,15 @@ func TestServerDNS(t *testing.T) {
 			t.Fatal(err)
 		}
 		util.CheckResponse(t, q, in, "127.0.0.1")
+
+		// Retry using tcp
+		c.Net = "tcp"
+		in, _, err = c.Exchange(q, "127.0.0.1:8053")
+		if err != nil {
+			t.Fatal(err)
+		}
+		util.CheckResponse(t, q, in, "127.0.0.1")
+
 		cancelCtx()
 	}
 }
@@ -69,6 +78,15 @@ func TestServerDOH(t *testing.T) {
 			t.Fatal(err)
 		}
 		util.CheckResponse(t, q, in, "127.0.0.1")
+
+		// Retry using tcp
+		c.Net = "tcp"
+		in, _, err = c.Exchange(q, "127.0.0.1:8053")
+		if err != nil {
+			t.Fatal(err)
+		}
+		util.CheckResponse(t, q, in, "127.0.0.1")
+
 		cancelCtx()
 	}
 }
@@ -99,6 +117,15 @@ func TestServerDOT(t *testing.T) {
 			t.Fatal(err)
 		}
 		util.CheckResponse(t, q, in, "127.0.0.1")
+
+		// Retry using tcp
+		c.Net = "tcp"
+		in, _, err = c.Exchange(q, "127.0.0.1:8053")
+		if err != nil {
+			t.Fatal(err)
+		}
+		util.CheckResponse(t, q, in, "127.0.0.1")
+
 		cancelCtx()
 	}
 }

@@ -161,6 +161,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		log := config.Log
 
 		clientAddr := w.RemoteAddr().String()
+		clientNet := w.RemoteAddr().Network()
 
 		// Stats
 		startTime := time.Now()
@@ -183,7 +184,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// Dont handle queries with more than one question
 		if len(q.Question) != 1 {
-			log.Debugf("Connection: %s [invalid question]", clientHost)
+			log.Debugf("Connection: %s/%s [invalid question]", clientHost, clientNet)
 			return
 		}
 
@@ -196,7 +197,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// Check ACL
 		if !checkAcl(config.Acl, clientIP) {
-			log.Debugf("Connection: %s [refused]", clientHost)
+			log.Debugf("Connection: %s/%s [refused]", clientHost, clientNet)
 			return
 		}
 
@@ -204,7 +205,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// Check blocklist
 		if config.BlockList.Match(qname, qtype) {
-			log.Debugf("Connection: %s <%s %s> [blocked]", clientHost, qname, dns.TypeToString[qtype])
+			log.Debugf("Connection: %s/%s <%s %s> [blocked]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
 			logItem.Blocked = true
 			return
@@ -213,7 +214,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// Resolve address
 		out, err, cached := resolve(config, q)
 		if err != nil {
-			log.Debugf("Connection: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
+			log.Debugf("Connection: %s/%s <%s %s> [upstream error]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 			logItem.Error = true
 			return
@@ -226,7 +227,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			q.Question[0].Qtype = dns.TypeA
 			dns64_out, err, cached := resolve(config, q)
 			if err != nil {
-				log.Debugf("DNS64: %s <%s %s> [upstream error]", clientHost, qname, dns.TypeToString[qtype])
+				log.Debugf("DNS64: %s/%s <%s %s> [upstream error]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 				logItem.Error = true
 				return
@@ -251,9 +252,9 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 				}
 			}
 			if cached {
-				log.Debugf("Connection: %s <%s %s> [dns64 cached]", clientHost, qname, dns.TypeToString[qtype])
+				log.Debugf("Connection: %s/%s <%s %s> [dns64 cached]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			} else {
-				log.Debugf("Connection: %s <%s %s> [dns64 ok]", clientHost, qname, dns.TypeToString[qtype])
+				log.Debugf("Connection: %s/%s <%s %s> [dns64 ok]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			}
 			logItem.Rcode = dns64_out.Rcode
 			logItem.Cached = cached
@@ -263,9 +264,9 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// Return msg
 		if cached {
-			log.Debugf("Connection: %s <%s %s> [cached]", clientHost, qname, dns.TypeToString[qtype])
+			log.Debugf("Connection: %s/%s <%s %s> [cached]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 		} else {
-			log.Debugf("Connection: %s <%s %s> [ok]", clientHost, qname, dns.TypeToString[qtype])
+			log.Debugf("Connection: %s/%s <%s %s> [ok]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 		}
 		logItem.Rcode = out.Rcode
 		logItem.Cached = cached
