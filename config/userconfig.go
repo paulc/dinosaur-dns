@@ -26,6 +26,7 @@ type UserConfig struct {
 	BlocklistAAAA      []string `json:"blocklist-aaaa"`
 	BlocklistFromHosts []string `json:"blocklist-from-hosts"`
 	LocalRR            []string `json:"localrr"`
+	LocalRRPtr         []string `json:"localrr-ptr"`
 	Localzone          []string `json:"localzone"`
 	Dns64              bool     `json:"dns64"`
 	Dns64Prefix        string   `json:"dns64-prefix"`
@@ -93,7 +94,14 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 
 	// Local RRs
 	for _, v := range user_config.LocalRR {
-		if err := config.Cache.AddRRString(v, true); err != nil {
+		if err := config.Cache.AddRRString(v, true, false); err != nil {
+			return err
+		}
+	}
+
+	// Local RRs with auto-PTR
+	for _, v := range user_config.LocalRRPtr {
+		if err := config.Cache.AddRRString(v, true, true); err != nil {
 			return err
 		}
 	}

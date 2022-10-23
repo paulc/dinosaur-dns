@@ -80,10 +80,26 @@ func (c *DNSCache) AddRR(rr dns.RR, permanent bool) error {
 	return nil
 }
 
-func (c *DNSCache) AddRRString(entry string, permanent bool) error {
+func (c *DNSCache) AddRRString(entry string, permanent bool, ptr bool) error {
 	rr, err := dns.NewRR(entry)
 	if err != nil {
 		return fmt.Errorf("Error creating RR: %s", err)
+	}
+
+	// Try to add associated PTR record it ptr == true
+	if ptr {
+		switch v := rr.(type) {
+		case *dns.A:
+			if err := c.AddRR(createPtrA(v), permanent); err != nil {
+				return err
+			}
+		case *dns.AAAA:
+			if err := c.AddRR(createPtrAAAA(v), permanent); err != nil {
+				return err
+			}
+		default:
+			// Ignore
+		}
 	}
 	return c.AddRR(rr, permanent)
 }
@@ -176,14 +192,35 @@ func (c *DNSCache) Delete(query *dns.Msg) {
 	delete(c.Cache, key)
 }
 
-func (c *DNSCache) DeleteName(name string, qtype string) {
+func (c *DNSCache) DeleteName(name string, qtype string, ptr bool) {
 
+	// Try to delete associated PTR record it ptr == true
+	if ptr {
+		fwd, found := c.GetName(name, qtype)
+		if found {
+			// We only lock critical sections to avoid deadlock with c.GetName
+			c.Lock()
+			for _, rr := range fwd.Answer {
+				switch v := rr.(type) {
+				case *dns.A:
+					key := DNSCacheKey{Name: reverseIP4(v.A), Qtype: dns.TypePTR}
+					delete(c.Cache, key)
+				case *dns.AAAA:
+					key := DNSCacheKey{Name: reverseIP6(v.AAAA), Qtype: dns.TypePTR}
+					delete(c.Cache, key)
+				default:
+					// Ignore
+				}
+			}
+			c.Unlock()
+		}
+	}
+
+	// We ignore invalid qtype as delete will just fail
 	c.Lock()
-	defer c.Unlock()
-
-	// We ignore invalid qtype as delete will fail
 	key := DNSCacheKey{Name: dns.CanonicalName(name), Qtype: dns.StringToType[qtype]}
 	delete(c.Cache, key)
+	c.Unlock()
 }
 
 func (c *DNSCache) Flush() (total, expired int) {

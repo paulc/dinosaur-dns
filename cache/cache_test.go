@@ -156,7 +156,7 @@ func TestConcurrent(t *testing.T) {
 func TestAddRRString(t *testing.T) {
 
 	cache := New()
-	err := cache.AddRRString("abc.def.com 60 A 1.2.3.4", true)
+	err := cache.AddRRString("abc.def.com 60 A 1.2.3.4", true, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -172,7 +172,7 @@ func TestAddRRString(t *testing.T) {
 
 func TestGetName(t *testing.T) {
 	cache := New()
-	err := cache.AddRRString("abc.def.com 60 A 1.2.3.4", true)
+	err := cache.AddRRString("abc.def.com 60 A 1.2.3.4", true, false)
 	if err != nil {
 		t.Error(err)
 	}

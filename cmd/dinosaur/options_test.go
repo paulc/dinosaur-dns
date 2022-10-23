@@ -24,6 +24,7 @@ func TestGetUserConfig(t *testing.T) {
 		"-blocklist-aaaa", "block-aaaa.txt",
 		"-blocklist-from-hosts", "block-hosts.txt",
 		"-localrr", "abcd.local. 60 IN A 127.0.0.1",
+		"-localrr-ptr", "ptr.local. 60 IN A 1.2.3.4",
 		"-localzone", "local-zone.txt",
 		"-dns64",
 		"-dns64-prefix", "1111::/96",
@@ -50,6 +51,7 @@ func TestGetUserConfig(t *testing.T) {
 		slices.Compare(user_config.BlocklistAAAA, []string{"block-aaaa.txt"}) != 0 ||
 		slices.Compare(user_config.BlocklistFromHosts, []string{"block-hosts.txt"}) != 0 ||
 		slices.Compare(user_config.LocalRR, []string{"abcd.local. 60 IN A 127.0.0.1"}) != 0 ||
+		slices.Compare(user_config.LocalRRPtr, []string{"ptr.local. 60 IN A 1.2.3.4"}) != 0 ||
 		slices.Compare(user_config.Localzone, []string{"local-zone.txt"}) != 0 ||
 		!user_config.Dns64 ||
 		user_config.Dns64Prefix != "1111::/96" ||

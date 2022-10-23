@@ -37,6 +37,10 @@ func CheckResponse(t *testing.T, q, msg *dns.Msg, expected string) {
 			if v.AAAA.String() == expected {
 				return
 			}
+		case *dns.PTR:
+			if v.Ptr == expected {
+				return
+			}
 		default:
 			return
 		}

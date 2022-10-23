@@ -51,6 +51,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var localRRFlag util.MultiFlag
 	flag.Var(&localRRFlag, "localrr", "Local DNS resource record")
 
+	var localRRPtrFlag util.MultiFlag
+	flag.Var(&localRRPtrFlag, "localrr-ptr", "Local DNS resource record (with auto-PTR)")
+
 	var localZoneFlag util.MultiFlag
 	flag.Var(&localZoneFlag, "localzone", "Local DNS zone file")
 
@@ -97,6 +100,11 @@ func GetUserConfig() (*config.UserConfig, error) {
 	// Local cache entries
 	for _, v := range localRRFlag {
 		user_config.LocalRR = append(user_config.LocalRR, v)
+	}
+
+	// Local cache + ptr entries
+	for _, v := range localRRPtrFlag {
+		user_config.LocalRRPtr = append(user_config.LocalRRPtr, v)
 	}
 
 	// Local zonefile cache entries
