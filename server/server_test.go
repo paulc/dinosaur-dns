@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -81,7 +81,7 @@ func TestServerDOH(t *testing.T) {
 
 		// Retry using tcp
 		c.Net = "tcp"
-		in, _, err = c.Exchange(q, "127.0.0.1:8053")
+		in, _, err = c.Exchange(q, "127.0.0.1:8054")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -120,7 +120,7 @@ func TestServerDOT(t *testing.T) {
 
 		// Retry using tcp
 		c.Net = "tcp"
-		in, _, err = c.Exchange(q, "127.0.0.1:8053")
+		in, _, err = c.Exchange(q, "127.0.0.1:8055")
 		if err != nil {
 			t.Fatal(err)
 		}

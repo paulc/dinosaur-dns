@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/server"
 )
 
 func main() {
@@ -21,5 +22,5 @@ func main() {
 
 	ctx := context.Background()
 	ready := make(chan bool)
-	StartServer(ctx, proxy_config, ready)
+	server.StartServer(ctx, proxy_config, ready)
 }

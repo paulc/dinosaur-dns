@@ -334,6 +334,41 @@ func TestHandlerLocalRR(t *testing.T) {
 	}
 }
 
+func TestHandlerLocalRRPtr(t *testing.T) {
+
+	handler, _ := getTestHandler(t, `{
+		"upstream": [ "https://cloudflare-dns.com/dns-query" ],
+		"localrr-ptr": [ "test1.local. A 1.2.3.4", "test2.local 123 AAAA 1234::abcd" ],
+		"discard": true
+	}`)
+
+	rw := NewTestResponseWriter()
+
+	q := util.CreateQuery("test1.local", "A")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "1.2.3.4")
+
+	rw.Reset()
+	q = util.CreateQuery("test2.local", "AAAA")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "1234::abcd")
+
+	if rw.outmsg.Answer[0].Header().Ttl != 123 {
+		t.Error("Invalid TTL", rw.outmsg.Answer[0].Header().Ttl)
+	}
+
+	rw.Reset()
+	q = util.CreateQuery("4.3.2.1.in-addr.arpa", "PTR")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "test1.local.")
+
+	rw.Reset()
+	q = util.CreateQuery("d.c.b.a.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.3.2.1.ip6.arpa", "PTR")
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "test2.local.")
+
+}
+
 func TestHandlerLocalzone(t *testing.T) {
 
 	handler, _ := getTestHandler(t, `{

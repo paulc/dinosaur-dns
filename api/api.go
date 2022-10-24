@@ -73,7 +73,7 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 		router.Handle("/api", apiServer)
 
 		// Log handler
-		router.HandleFunc("/log", makeLogHandler(config.StatsHandler))
+		router.HandleFunc("/log", makeLogHandler(config.StatsHandler, log))
 
 		// Static files
 		router.PathPrefix("/static/").Handler(gzipped.FileServer(http.FS(static)))

@@ -245,7 +245,7 @@ func (c *DNSCache) Debug() (result []string) {
 	defer c.Unlock()
 
 	for _, v := range c.Cache {
-		result = append(result, fmt.Sprintf("%s", v))
+		result = append(result, v.String())
 	}
 
 	return
