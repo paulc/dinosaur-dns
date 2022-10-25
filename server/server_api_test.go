@@ -87,56 +87,61 @@ func TestServerApi(t *testing.T) {
 			resp.Body.Close()
 		})
 
-		t.Run("JSON-RPC Blocklist", func(t *testing.T) {
+		t.Run("BlockList", func(t *testing.T) {
 
-			rpc_resp, err := util.JsonRpcRequest("http://127.0.0.1:8553/api", "api.BlockListAdd", api.BlockListAddReq{[]string{"aaaa.com", "bbbb.com"}})
-			if err != nil {
+			if result, err := util.JsonRpcRequest[api.Empty](
+				"http://127.0.0.1:8553/api",
+				"api.BlockListAdd",
+				api.BlockListAddReq{[]string{"aaaa.com", "bbbb.com"}}); err != nil {
 				t.Fatal(err)
+			} else {
+				if result != struct{}{} {
+					t.Errorf("BlockListAdd: %+v", result)
+				}
 			}
-			t.Logf("ADD: %+v\n", rpc_resp)
 
-			if rpc_resp.(*util.JsonRpcResp).Error.Code != 0 {
-				t.Fatal(rpc_resp.(*util.JsonRpcResp).Error)
-			}
-
-			rpc_resp, err = util.JsonRpcRequest("http://127.0.0.1:8553/api", "api.BlockListCount", api.Empty{})
-			if err != nil {
+			if result, err := util.JsonRpcRequest[api.BlockListCountRes](
+				"http://127.0.0.1:8553/api",
+				"api.BlockListCount",
+				api.Empty{}); err != nil {
 				t.Fatal(err)
+			} else {
+				if result.Count != 2 {
+					t.Errorf("BlockListCount: %+v", result)
+				}
 			}
-			t.Logf("COUNT: %+v\n", rpc_resp)
 
-			if rpc_resp.(*util.JsonRpcResp).Error.Code != 0 {
-				t.Fatal(rpc_resp.(*util.JsonRpcResp).Error)
-			}
-
-			rpc_resp, err = util.JsonRpcRequest("http://127.0.0.1:8553/api", "api.BlockListDelete", api.BlockListDeleteReq{"bbbb.com"})
-			if err != nil {
+			if result, err := util.JsonRpcRequest[api.BlockListDeleteRes](
+				"http://127.0.0.1:8553/api",
+				"api.BlockListDelete",
+				api.BlockListDeleteReq{"bbbb.com"}); err != nil {
 				t.Fatal(err)
+			} else {
+				if result.Found != true {
+					t.Errorf("BlockListDelete: %+v", result)
+				}
 			}
-			t.Logf("DELETE: %+v\n", rpc_resp)
 
-			if rpc_resp.(*util.JsonRpcResp).Error.Code != 0 {
-				t.Fatal(rpc_resp.(*util.JsonRpcResp).Error)
-			}
-
-			rpc_resp, err = util.JsonRpcRequest("http://127.0.0.1:8553/api", "api.BlockListDelete", api.BlockListDeleteReq{"zzzz.com"})
-			if err != nil {
+			if result, err := util.JsonRpcRequest[api.BlockListDeleteRes](
+				"http://127.0.0.1:8553/api",
+				"api.BlockListDelete",
+				api.BlockListDeleteReq{"zzzz.com"}); err != nil {
 				t.Fatal(err)
+			} else {
+				if result.Found != false {
+					t.Errorf("BlockListDelete: %+v", result)
+				}
 			}
-			t.Logf("DELETE: %+v\n", rpc_resp)
 
-			if rpc_resp.(*util.JsonRpcResp).Error.Code != 0 {
-				t.Fatal(rpc_resp.(*util.JsonRpcResp).Error)
-			}
-
-			rpc_resp, err = util.JsonRpcRequest("http://127.0.0.1:8553/api", "api.BlockListCount", api.Empty{})
-			if err != nil {
+			if result, err := util.JsonRpcRequest[api.BlockListCountRes](
+				"http://127.0.0.1:8553/api",
+				"api.BlockListCount",
+				api.Empty{}); err != nil {
 				t.Fatal(err)
-			}
-			t.Logf("COUNT: %+v\n", rpc_resp)
-
-			if rpc_resp.(*util.JsonRpcResp).Error.Code != 0 {
-				t.Fatal(rpc_resp.(*util.JsonRpcResp).Error)
+			} else {
+				if result.Count != 1 {
+					t.Errorf("BlockListCount: %+v", result)
+				}
 			}
 
 		})

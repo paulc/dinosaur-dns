@@ -7,12 +7,11 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"time"
 )
 
 type JsonRpcReq struct {
 	JsonRpc string      `json:"jsonrpc"`
-	Id      string      `json:"id"`
+	Id      int         `json:"id"`
 	Method  string      `json:"method"`
 	Params  interface{} `json:"params"`
 }
@@ -24,51 +23,87 @@ type JsonRpcError struct {
 }
 
 type JsonRpcResp struct {
-	JsonRpc string       `json:"jsonrpc"`
-	Id      string       `json:"id"`
-	Error   JsonRpcError `json:"error"`
-	Result  interface{}  `json:"result"`
+	JsonRpc string          `json:"jsonrpc"`
+	Id      int             `json:"id"`
+	Error   json.RawMessage `json:"error"`
+	Result  json.RawMessage `json:"result"`
 }
 
-func JsonRpcEncoder(method string, params interface{}) ([]byte, error) {
+func JsonRpcEncoder(method string, params interface{}) (b []byte, id int, err error) {
+	id = int(rand.Int31())
 	req := JsonRpcReq{
 		JsonRpc: "2.0",
-		Id:      fmt.Sprintf("%d-%d", time.Now().UnixMilli(), rand.Int31()),
+		Id:      id,
 		Method:  method,
 		Params:  params,
 	}
-	return json.Marshal(req)
+	b, err = json.Marshal(req)
+	return
 }
 
-func JsonRpcRequest(endpoint, method string, params interface{}) (interface{}, error) {
+func JsonRpcRequest[T any](endpoint, method string, params interface{}) (result T, err error) {
 
-	b, err := JsonRpcEncoder(method, params)
+	// Encode request
+	b, id, err := JsonRpcEncoder(method, params)
 	if err != nil {
-		return nil, err
+		return
 	}
+
+	// Create client
 	client := http.Client{}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(b))
 	if err != nil {
-		return nil, err
+		return
 	}
 	req.Header.Add("Content-Type", "application/json")
 
+	// HTTP request
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return
 	}
 
+	// Check status
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf(resp.Status)
+		return
+	}
+
+	// Read body
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	rpc_resp := &JsonRpcResp{}
-
-	if err = json.Unmarshal(body, rpc_resp); err != nil {
-		return nil, err
+	// Unmarshal envelope
+	rpc_resp := JsonRpcResp{}
+	if err = json.Unmarshal(body, &rpc_resp); err != nil {
+		return
 	}
-	return rpc_resp, nil
+
+	if rpc_resp.Id != id {
+		err = fmt.Errorf("JSON-RPC: Invalid Id (%d/%d)", id, rpc_resp.Id)
+		return
+	}
+
+	if rpc_resp.Error != nil {
+		rpc_error := JsonRpcError{}
+		if err = json.Unmarshal(rpc_resp.Error, &rpc_error); err != nil {
+			return
+		}
+		err = fmt.Errorf("JSON-RPC: %d [%s] [%s]", rpc_error.Code, rpc_error.Message, rpc_error.Data)
+		return
+	}
+
+	if rpc_resp.Result == nil {
+		err = fmt.Errorf("JSON-RPC: Nil Response")
+		return
+	}
+
+	if err = json.Unmarshal(rpc_resp.Result, &result); err != nil {
+		return
+	}
+
+	return
 }
