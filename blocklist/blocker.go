@@ -1,5 +1,7 @@
 package blocklist
 
+import "golang.org/x/exp/slices"
+
 type Blocker interface {
 	Match(parts []string, qtype uint16) bool
 	Priority() int
@@ -7,7 +9,9 @@ type Blocker interface {
 
 const (
 	PRI_PREFIX = iota
-	PRI_ANY
+	PRI_FULL
+	PRI_PREFIX_QTYPE
+	PRI_FULL_QTYPE
 )
 
 type BlockPrefix struct {
@@ -21,13 +25,37 @@ func (b *BlockPrefix) Priority() int {
 	return PRI_PREFIX
 }
 
-type BlockAny struct {
+type BlockPrefixQtype struct {
+	Qtype []uint16
 }
 
-func (b *BlockAny) Match(parts []string, qtype uint16) bool {
+func (b *BlockPrefixQtype) Match(parts []string, qtype uint16) bool {
+	return slices.Contains(b.Qtype, qtype)
+}
+
+func (b *BlockPrefixQtype) Priority() int {
+	return PRI_PREFIX_QTYPE
+}
+
+type BlockFullPath struct {
+}
+
+func (b *BlockFullPath) Match(parts []string, qtype uint16) bool {
 	return len(parts) == 0
 }
 
-func (b *BlockAny) Priority() int {
-	return PRI_ANY
+func (b *BlockFullPath) Priority() int {
+	return PRI_FULL
+}
+
+type BlockFullPathQtype struct {
+	Qtype []uint16
+}
+
+func (b *BlockFullPathQtype) Match(parts []string, qtype uint16) bool {
+	return len(parts) == 0 && slices.Contains(b.Qtype, qtype)
+}
+
+func (b *BlockFullPathQtype) Priority() int {
+	return PRI_FULL_QTYPE
 }
