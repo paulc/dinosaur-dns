@@ -105,3 +105,27 @@ func TestBlockQtype(t *testing.T) {
 		t.Error(b.String())
 	}
 }
+
+func TestNewBlocker(t *testing.T) {
+
+	for _, v := range []struct {
+		s string
+		e bool
+		b Blocker
+	}{
+		{"Block", false, Block{}},
+		{"Block:ANY", false, Block{}},
+		{"Block:AAAA", false, BlockQtype{dns.TypeAAAA}},
+		{"Block:ZZZZ", true, nil},
+		{"BlockPrefix", false, BlockPrefix{}},
+		{"BlockPrefix:ANY", false, BlockPrefix{}},
+		{"BlockPrefix:AAAA", false, BlockPrefixQtype{dns.TypeAAAA}},
+		{"BlockPrefix:ZZZZ", true, nil},
+		{"ZZZZ", true, nil},
+	} {
+		n, err := NewBlocker(v.s)
+		if (err != nil) != v.e || n != v.b {
+			t.Error(v.s, n, err)
+		}
+	}
+}

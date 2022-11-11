@@ -1,12 +1,20 @@
 package blocklist_v2
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/miekg/dns"
 )
+
+const TestBlockList = `. [BlockPrefix:AAAA]
+bbbb.aaaa. [BlockPrefix:NS]
+cccc.bbbb.aaaa. [Block:ANY]
+dddd.bbbb.aaaa. [Block:CNAME Block:TXT]
+xxxx. [BlockPrefix:ANY]
+`
 
 func TestTrieAdd(t *testing.T) {
 
@@ -19,8 +27,12 @@ func TestTrieAdd(t *testing.T) {
 	root.Add([]string{"dddd", "bbbb", "aaaa"}, BlockQtype{dns.TypeTXT})
 	root.Add([]string{"xxxx"}, BlockPrefix{})
 
-	// buf := bytes.Buffer{}
-	// root.PrintTree(&buf, []string{})
+	buf := bytes.Buffer{}
+	root.PrintTree(&buf, []string{})
+
+	if buf.String() != TestBlockList {
+		t.Error(buf.String())
+	}
 
 	out := []BlockEntry{}
 	root.Dump([]string{}, &out)

@@ -5,6 +5,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 // Trie implementation
@@ -104,17 +106,35 @@ func (l *level) Count() (total int) {
 	return
 }
 
-func (l *level) Dump(prefix []string, out *[]BlockEntry) {
-	entry := BlockEntry{Name: strings.Join(prefix, ".") + "."}
+func (l *level) Walk(prefix []string, f func(b BlockEntry)) {
+
 	if len(l.Rules) > 0 {
+		entry := BlockEntry{Name: strings.Join(prefix, ".") + "."}
 		for _, v := range l.Rules {
 			entry.Rules = append(entry.Rules, v.String())
 		}
-		*out = append(*out, entry)
+		f(entry)
 	}
-	for k, v := range l.Children {
-		v.Dump(append([]string{k}, prefix...), out)
+
+	// Sort children
+	keys := []string{}
+	for k, _ := range l.Children {
+		keys = append(keys, k)
 	}
+	slices.Sort(keys)
+
+	for _, k := range keys {
+		v := l.Children[k]
+		v.Walk(append([]string{k}, prefix...), f)
+	}
+}
+
+func (l *level) Dump(prefix []string, out *[]BlockEntry) {
+	l.Walk(prefix, func(b BlockEntry) { *out = append(*out, b) })
+}
+
+func (l *level) PrintTree(w io.Writer, prefix []string) {
+	l.Walk(prefix, func(b BlockEntry) { fmt.Fprintf(w, "%s %s\n", b.Name, b.Rules) })
 }
 
 func (l *level) String() string {
@@ -126,11 +146,4 @@ func (l *level) String() string {
 		c = append(c, k)
 	}
 	return fmt.Sprintf("%s", rules)
-}
-
-func (l *level) PrintTree(w io.Writer, prefix []string) {
-	fmt.Fprintf(w, "%s. : %s\n", strings.Join(prefix, "."), l)
-	for k, v := range l.Children {
-		v.PrintTree(w, append(prefix, k))
-	}
 }
