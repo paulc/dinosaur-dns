@@ -128,9 +128,15 @@ func TestDohResolverHasTimeout(t *testing.T) {
 func TestDohResolverTimeout(t *testing.T) {
 	// HTTP server that accepts the connection and reads the request but
 	// never writes a response, simulating a silent upstream.
+	// The handler blocks on r.Context().Done() so that when the client
+	// disconnects (after its timeout fires), the handler returns promptly
+	// and httptest.Server.Close() can complete without hanging.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body) // drain body so the client knows the server received it
-		time.Sleep(time.Hour)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(time.Hour): // failsafe — never hit in normal operation
+		}
 	}))
 	defer srv.Close()
 

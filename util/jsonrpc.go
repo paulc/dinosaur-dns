@@ -65,7 +65,7 @@ func JsonRpcRequest[T any](endpoint, method string, params interface{}) (result 
 
 	// Check status
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf(resp.Status)
+		err = fmt.Errorf("%s", resp.Status)
 		return
 	}
 
