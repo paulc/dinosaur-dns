@@ -21,6 +21,9 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 	json_config, _ := json.MarshalIndent(proxy_config.UserConfig, "", "  ")
 	log.Debugf("%s\n", string(json_config))
 
+	// Register handler before starting listeners so no query can arrive with an empty mux
+	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
+
 	// Start listeners
 	for _, listenAddr := range proxy_config.ListenAddr {
 
@@ -81,9 +84,6 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		}
 
 	*/
-
-	// Handle requests
-	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
 
 	// Start flush cache goroutine
 	go func() {

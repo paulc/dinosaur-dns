@@ -164,11 +164,13 @@ func (c *DNSCache) Get(query *dns.Msg) (*dns.Msg, bool) {
 	reply.Id = query.Id
 
 	if !entry.Permanent {
-		// Decrement TTL for cached records
+		// Decrement TTL for cached records; skip OPT records whose pseudo-TTL stores EDNS0 flags
 		delta := uint32(timeNow().Sub(entry.Inserted).Seconds())
 		for _, section := range [][]dns.RR{reply.Answer, reply.Ns, reply.Extra} {
 			for _, v := range section {
-				v.Header().Ttl -= delta
+				if v.Header().Rrtype != dns.TypeOPT {
+					v.Header().Ttl -= delta
+				}
 			}
 		}
 	}

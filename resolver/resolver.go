@@ -88,7 +88,7 @@ func (r *DotResolver) String() string {
 }
 
 func NewDotResolver(upstream string) *DotResolver {
-	address := strings.TrimLeft(upstream, "tls://")
+	address := strings.TrimPrefix(upstream, "tls://")
 	return &DotResolver{
 		Upstream:   upstream,
 		RetryLimit: 3,
@@ -132,6 +132,7 @@ func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) 
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request error: %s", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP request failed - status: %s", resp.Status)
@@ -144,7 +145,7 @@ func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) 
 	}
 
 	out := new(dns.Msg)
-	if out.Unpack(buffer.Bytes()) != nil {
+	if err = out.Unpack(buffer.Bytes()); err != nil {
 		return nil, fmt.Errorf("Error parsing DNS response: %s", err)
 	}
 

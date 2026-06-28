@@ -54,6 +54,7 @@ func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request error: %s", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP request failed - status: %s", resp.Status)
@@ -66,7 +67,7 @@ func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
 	}
 
 	out := new(dns.Msg)
-	if out.Unpack(buffer.Bytes()) != nil {
+	if err = out.Unpack(buffer.Bytes()); err != nil {
 		return nil, fmt.Errorf("Error parsing DNS response: %s", err)
 	}
 
@@ -112,10 +113,15 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 		return
 	}
 
-	// Try each resolver
-	for i, resolver := range config.Upstream {
+	// Snapshot the upstream list to avoid data races with concurrent rotation.
+	config.RLock()
+	upstreams := append(config.Upstream[:0:0], config.Upstream...)
+	config.RUnlock()
 
-		out, err = resolver.Resolve(log, q)
+	// Try each resolver
+	for i, r := range upstreams {
+
+		out, err = r.Resolve(log, q)
 
 		if err == nil {
 			// If this is the first upstream clear the error count
@@ -132,18 +138,20 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 
 		// Upstream error - if this is the first upstream we count errors and try to switch if threshold exceeded
 		if i == 0 {
-			config.UpstreamErr += 1
+			config.Lock()
+			config.UpstreamErr++
 			if config.UpstreamErr > 3 {
 				// Demote upstream
-				config.Lock()
 				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
 				config.UpstreamErr = 0
+				demoted := config.Upstream
 				config.Unlock()
-				log.Printf("Error threshold exceeded - demoting upstream: %s", config.Upstream)
+				log.Printf("Error threshold exceeded - demoting upstream: %s", demoted)
+			} else {
+				config.Unlock()
 			}
-
 		}
-		log.Debugf("Upstream error <%s>: %s", resolver, err)
+		log.Debugf("Upstream error <%s>: %s", r, err)
 	}
 
 	// None of the resolvers worked
@@ -203,8 +211,11 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		logItem.Acl = true
 
-		// Check blocklist
-		if config.BlockList.Match(qname, qtype) {
+		// Check blocklist — read pointer under lock; refresh goroutine replaces it under the same lock
+		config.RLock()
+		bl := config.BlockList
+		config.RUnlock()
+		if bl.Match(qname, qtype) {
 			log.Debugf("Connection: %s/%s <%s %s> [blocked]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
 			logItem.Blocked = true
@@ -223,16 +234,17 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// If we get an empty answer for an AAAA request and DNS64 is configured try to generate DNS64 response
 		// (only for queries from IPv6 address)
 		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 && clientIP.To4() == nil {
-			// Try DNS64 lookup
-			q.Question[0].Qtype = dns.TypeA
-			dns64_out, err, cached := resolve(config, q)
+			// Try DNS64 lookup — use a copy so the original q (TypeAAAA) is preserved for error responses
+			q4 := q.Copy()
+			q4.Question[0].Qtype = dns.TypeA
+			dns64_out, err, cached := resolve(config, q4)
 			if err != nil {
 				log.Debugf("DNS64: %s/%s <%s %s> [upstream error]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 				logItem.Error = true
 				return
 			}
-			// Rewrite response
+			// Rewrite response question to match the original AAAA query
 			dns64_out.Question[0].Qtype = dns.TypeAAAA
 			for i, rr := range dns64_out.Answer {
 				switch v := rr.(type) {
