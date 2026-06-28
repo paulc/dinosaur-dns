@@ -21,15 +21,27 @@ type Resolver interface {
 	String() string
 }
 
+const (
+	// upstreamTimeout is the per-request deadline applied to all resolver types,
+	// bounding worst-case query latency for a single upstream call.
+	upstreamTimeout = 5 * time.Second
+
+	// dotPoolSize is the maximum number of idle TLS connections in the DoT pool.
+	dotPoolSize = 5
+)
+
 // ── UDP Resolver ──────────────────────────────────────────────────────────────
 
+// UdpResolver sends plain UDP DNS queries. UDP is stateless so there is no
+// connection to pool, but the dns.Client is kept on the struct so its Timeout
+// is set once and shared across all concurrent calls.
 type UdpResolver struct {
 	Upstream string
+	client   dns.Client
 }
 
 func (r *UdpResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) {
-	c := &dns.Client{}
-	out, _, err := c.Exchange(q, r.Upstream)
+	out, _, err := r.client.Exchange(q, r.Upstream)
 	if err != nil {
 		return nil, fmt.Errorf("DNS Query Error: %s", err)
 	}
@@ -39,17 +51,13 @@ func (r *UdpResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) 
 func (r *UdpResolver) String() string { return r.Upstream }
 
 func NewUdpResolver(upstream string) *UdpResolver {
-	return &UdpResolver{Upstream: upstream}
+	return &UdpResolver{
+		Upstream: upstream,
+		client:   dns.Client{Timeout: upstreamTimeout},
+	}
 }
 
 // ── DoT Resolver ──────────────────────────────────────────────────────────────
-
-const (
-	// dotPoolSize is the maximum number of idle TLS connections kept in the pool.
-	dotPoolSize = 5
-	// dotTimeout is applied to both the TLS handshake (dial) and each DNS exchange.
-	dotTimeout = 5 * time.Second
-)
 
 type dotConn struct {
 	conn *dns.Conn
@@ -172,9 +180,9 @@ func NewDotResolver(upstream string) *DotResolver {
 			},
 			// Timeout covers both ExchangeWithConn and (via Dialer) the
 			// initial TLS handshake, bounding worst-case latency.
-			Timeout: dotTimeout,
+			Timeout: upstreamTimeout,
 			Dialer: &net.Dialer{
-				Timeout:   dotTimeout,
+				Timeout:   upstreamTimeout,
 				KeepAlive: 30 * time.Second,
 			},
 		},
@@ -184,13 +192,16 @@ func NewDotResolver(upstream string) *DotResolver {
 
 // ── DoH Resolver ─────────────────────────────────────────────────────────────
 
+// DohResolver sends DNS queries over HTTPS. A single *http.Client is kept on
+// the struct so its underlying http.Transport — which pools TCP connections and
+// caches TLS sessions — is shared across all calls, avoiding a new TLS
+// handshake per query.
 type DohResolver struct {
 	Upstream string
+	client   *http.Client
 }
 
 func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) {
-
-	c := &http.Client{}
 
 	pack, err := q.Pack()
 	if err != nil {
@@ -205,7 +216,7 @@ func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) 
 	request.Header.Set("Accept", "application/dns-message")
 	request.Header.Set("content-type", "application/dns-message")
 
-	resp, err := c.Do(request)
+	resp, err := r.client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request error: %s", err)
 	}
@@ -233,5 +244,27 @@ func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) 
 func (r *DohResolver) String() string { return r.Upstream }
 
 func NewDohResolver(upstream string) *DohResolver {
-	return &DohResolver{Upstream: upstream}
+	return &DohResolver{
+		Upstream: upstream,
+		client: &http.Client{
+			// Timeout covers the full round-trip (dial + TLS + request + response body).
+			Timeout: upstreamTimeout,
+			Transport: &http.Transport{
+				// Per-resolver TLS session cache: reconnections after an idle-timeout
+				// drop can resume the session instead of doing a full handshake.
+				TLSClientConfig: &tls.Config{
+					ClientSessionCache: tls.NewLRUClientSessionCache(64),
+				},
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          5,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   upstreamTimeout,
+				ExpectContinueTimeout: 1 * time.Second,
+				DialContext: (&net.Dialer{
+					Timeout:   upstreamTimeout,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+			},
+		},
+	}
 }
