@@ -1,17 +1,17 @@
 package proxy
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
@@ -22,57 +22,6 @@ func matchDomain(domains []string, name string) bool {
 		}
 	}
 	return false
-}
-
-func dnsRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
-	c := &dns.Client{}
-	out, _, err := c.Exchange(r, resolver)
-	if err != nil {
-		return nil, fmt.Errorf("DNS Query Error: %s", err)
-	}
-	return out, nil
-}
-
-func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
-
-	c := &http.Client{}
-
-	pack, err := r.Pack()
-	if err != nil {
-		return nil, fmt.Errorf("Error packing record: %s", err)
-	}
-
-	request, err := http.NewRequest("POST", resolver, bytes.NewReader(pack))
-	if err != nil {
-		return nil, fmt.Errorf("Error creating HTTP request: %s", err)
-	}
-
-	request.Header.Set("Accept", "application/dns-message")
-	request.Header.Set("content-type", "application/dns-message")
-
-	resp, err := c.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request error: %s", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP request failed - status: %s", resp.Status)
-	}
-
-	buffer := bytes.Buffer{}
-	_, err = buffer.ReadFrom(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Error reading HTTP body: %s", err)
-	}
-
-	out := new(dns.Msg)
-	if err = out.Unpack(buffer.Bytes()); err != nil {
-		return nil, fmt.Errorf("Error parsing DNS response: %s", err)
-	}
-
-	return out, nil
-
 }
 
 func dnsErrorResponse(r *dns.Msg, rcode int, err error) *dns.Msg {
@@ -286,20 +235,25 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 	}
 }
 
+// CheckUpstream probes a single upstream resolver and returns an error if it
+// does not respond to a root NS query within the configured timeout.
+// Handles all three resolver types: plain UDP (host:port), DoT (tls://...),
+// and DoH (https://...).
 func CheckUpstream(upstream string) error {
-	_, err := resolveQname(upstream, ".", "NS")
-	if err != nil {
+	var r resolver.Resolver
+	switch {
+	case strings.HasPrefix(upstream, "https://"):
+		r = resolver.NewDohResolver(upstream)
+	case strings.HasPrefix(upstream, "tls://"):
+		r = resolver.NewDotResolver(upstream)
+	default:
+		r = resolver.NewUdpResolver(upstream)
+	}
+	log := logger.New(logger.NewDiscard(true))
+	q := new(dns.Msg)
+	q.SetQuestion(".", dns.TypeNS)
+	if _, err := r.Resolve(log, q); err != nil {
 		return fmt.Errorf("Invalid resolver: %s (%s)", upstream, err)
 	}
 	return nil
-}
-
-func resolveQname(resolver string, qname string, qtype string) (*dns.Msg, error) {
-	r := new(dns.Msg)
-	r.SetQuestion(qname, dns.StringToType[qtype])
-	if strings.HasPrefix(resolver, "https://") {
-		return dohRequest(r, resolver)
-	} else {
-		return dnsRequest(r, resolver)
-	}
 }

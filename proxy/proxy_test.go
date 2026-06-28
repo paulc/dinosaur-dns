@@ -9,24 +9,31 @@ import (
 	"github.com/paulc/dinosaur-dns/util"
 )
 
-func TestDnsRequest(t *testing.T) {
-
-	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
-	out, err := dnsRequest(q, "1.1.1.1:53")
-	if err != nil {
+func TestCheckUpstreamUdp(t *testing.T) {
+	if err := CheckUpstream("1.1.1.1:53"); err != nil {
 		t.Fatal(err)
 	}
-	util.CheckResponse(t, q, out, "127.0.0.1")
 }
 
-func TestDohRequest(t *testing.T) {
-
-	q := util.CreateQuery("127.0.0.1.nip.io.", "A")
-	out, err := dohRequest(q, "https://cloudflare-dns.com/dns-query")
-	if err != nil {
+func TestCheckUpstreamDoH(t *testing.T) {
+	if err := CheckUpstream("https://cloudflare-dns.com/dns-query"); err != nil {
 		t.Fatal(err)
 	}
-	util.CheckResponse(t, q, out, "127.0.0.1")
+}
+
+func TestCheckUpstreamDot(t *testing.T) {
+	if err := CheckUpstream("tls://1.1.1.1:853"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckUpstreamDotInvalid(t *testing.T) {
+	// TCP connection refused is immediate, so this test is fast even though
+	// we go through the DoT resolver path.
+	err := CheckUpstream("tls://127.0.0.1:1")
+	if err == nil {
+		t.Fatal("expected error for unresponsive DoT upstream, got nil")
+	}
 }
 
 func TestResolve(t *testing.T) {
