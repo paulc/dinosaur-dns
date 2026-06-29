@@ -92,7 +92,7 @@ func TestServerApi(t *testing.T) {
 			if result, err := util.JsonRpcRequest[api.Empty](
 				"http://127.0.0.1:8553/api",
 				"api.BlockListAdd",
-				api.BlockListAddReq{[]string{"aaaa.com", "bbbb.com"}}); err != nil {
+				api.BlockListAddReq{Entries: []string{"aaaa.com", "bbbb.com"}}); err != nil {
 				t.Fatal(err)
 			} else {
 				if result != struct{}{} {
@@ -114,7 +114,7 @@ func TestServerApi(t *testing.T) {
 			if result, err := util.JsonRpcRequest[api.BlockListDeleteRes](
 				"http://127.0.0.1:8553/api",
 				"api.BlockListDelete",
-				api.BlockListDeleteReq{"bbbb.com"}); err != nil {
+				api.BlockListDeleteReq{Name: "bbbb.com"}); err != nil {
 				t.Fatal(err)
 			} else {
 				if result.Found != true {
@@ -125,7 +125,7 @@ func TestServerApi(t *testing.T) {
 			if result, err := util.JsonRpcRequest[api.BlockListDeleteRes](
 				"http://127.0.0.1:8553/api",
 				"api.BlockListDelete",
-				api.BlockListDeleteReq{"zzzz.com"}); err != nil {
+				api.BlockListDeleteReq{Name: "zzzz.com"}); err != nil {
 				t.Fatal(err)
 			} else {
 				if result.Found != false {
