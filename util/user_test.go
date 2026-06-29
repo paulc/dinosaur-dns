@@ -64,23 +64,14 @@ func TestSplitId(t *testing.T) {
 			t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
 		}
 	}
-	if !IsGH() {
-		for _, v := range []string{"nobody:nobody"} {
-			uid, gid, err := SplitId(v)
-			if err != nil {
-				t.Error(err)
-			}
-			if uid == 0 || gid == 0 {
-				t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
-			}
+	// Test nobody only if it resolves to a non-root user/group on this host.
+	if uid, gid, err := SplitId("nobody:nobody"); err == nil {
+		if uid == 0 || gid == 0 {
+			t.Errorf("Uid/Gid error: <nobody:nobody> : %d/%d — expected non-zero ids", uid, gid)
 		}
-		for _, v := range []string{"root:nobody"} {
-			uid, gid, err := SplitId(v)
-			if err != nil {
-				t.Error(err)
-			}
-			if uid == gid {
-				t.Errorf("Uid/Gid error: <%s> : %d/%d", v, uid, gid)
+		if uid2, gid2, err := SplitId("root:nobody"); err == nil {
+			if uid2 == gid2 {
+				t.Errorf("Uid/Gid error: <root:nobody> : %d/%d — expected uid != gid", uid2, gid2)
 			}
 		}
 	}

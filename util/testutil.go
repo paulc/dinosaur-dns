@@ -1,6 +1,7 @@
 package util
 
 import (
+	"net"
 	"os"
 	"testing"
 
@@ -82,4 +83,10 @@ func CheckResponseNxdomain(t *testing.T, q, msg *dns.Msg) {
 func IsGH() bool {
 	_, found := os.LookupEnv("GITHUB_ACTIONS")
 	return found
+}
+
+// HasInterface reports whether a named network interface is present on this host.
+func HasInterface(name string) bool {
+	_, err := net.InterfaceByName(name)
+	return err == nil
 }
