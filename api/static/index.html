@@ -118,13 +118,6 @@ select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4p
 
 <!-- Blocklist -->
 <section id="tab-blocklist" class="tab" hidden>
-  <div class="row" style="margin-bottom:8px">
-    Entries: <strong id="bl-count">--</strong>
-    <button class="btn" id="bl-refresh-btn">Refresh</button>
-    &nbsp; Filter: <input type="text" id="bl-filter" style="width:220px" placeholder="regex">
-    <button class="btn" id="bl-filter-clear">clear</button>
-  </div>
-
   <div style="display:flex;gap:16px;margin-bottom:8px;align-items:flex-start">
     <div>
       <div style="margin-bottom:3px">Add (one per line, domain or domain:TYPE):</div>
@@ -139,7 +132,14 @@ select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4p
     </div>
   </div>
 
-  <div id="bl-msg" style="min-height:1.3em;margin-bottom:6px"></div>
+  <div id="bl-msg" style="min-height:1.3em;margin-bottom:4px"></div>
+
+  <div class="row" style="margin-bottom:6px">
+    Entries: <strong id="bl-count">--</strong>
+    <button class="btn" id="bl-refresh-btn">Refresh</button>
+    &nbsp; Filter: <input type="text" id="bl-filter" style="width:220px" placeholder="regex">
+    <button class="btn" id="bl-filter-clear">clear</button>
+  </div>
 
   <div class="tbl-wrap">
     <table style="table-layout:fixed">
