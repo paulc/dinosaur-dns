@@ -202,6 +202,38 @@ blocklist management (including a timed pause), cache inspection, config
 viewer with change tracking, and API reference. Full JSON-RPC documentation
 is available on the API tab of the dashboard.
 
+## json-rpc utility
+
+`cmd/json-rpc` is a standalone CLI for calling any JSON-RPC 2.0 endpoint.
+
+```
+go build ./cmd/json-rpc
+```
+
+```
+# No params (defaults to {})
+./json-rpc --url http://localhost:8553/api --method api.Config --pretty
+
+# Params via flag
+./json-rpc --url http://localhost:8553/api --method api.BlockListAdd \
+  --params '{"entries":["ads.example.com"]}'
+
+# Params via stdin
+echo '{"seconds":300}' | \
+  ./json-rpc --url http://localhost:8553/api --method api.PauseBlocking --pretty
+```
+
+| Flag | Description |
+|------|-------------|
+| `--url` | JSON-RPC endpoint URL (required) |
+| `--method` | Method name, e.g. `api.Config` (required) |
+| `--params` | JSON params string (object or array); reads stdin if omitted |
+| `--id` | Request ID (random if 0) |
+| `--pretty` | Pretty-print JSON output |
+| `--debug` | Print request body and HTTP status to stderr |
+
+Exit codes: 0 = success, 1 = usage/network error, 2 = HTTP non-200.
+
 ## Logging
 
 | Flag | Effect |
