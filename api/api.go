@@ -36,7 +36,9 @@ func bindListener(bindAddress string, log *logger.Logger) (listener net.Listener
 			log.Print("Signal: ", sig)
 			log.Print("Removing API socket")
 			os.Remove(bindAddress)
-			os.Exit(0)
+			// Restore default handler and re-raise so context-based shutdown can proceed normally
+			signal.Reset(syscall.SIGINT, syscall.SIGTERM)
+			syscall.Kill(os.Getpid(), sig.(syscall.Signal))
 		}()
 
 	} else {
@@ -83,8 +85,8 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 
 		log.Printf("Starting API Listener: %s", config.ApiBind)
 
-		if http.Serve(listener, router) != nil {
-			log.Fatalf("Error starting API server: %s", err)
+		if serveErr := http.Serve(listener, router); serveErr != nil {
+			log.Fatalf("Error starting API server: %s", serveErr)
 		}
 	}
 }

@@ -1,17 +1,17 @@
 package proxy
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/logger"
+	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
@@ -22,56 +22,6 @@ func matchDomain(domains []string, name string) bool {
 		}
 	}
 	return false
-}
-
-func dnsRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
-	c := &dns.Client{}
-	out, _, err := c.Exchange(r, resolver)
-	if err != nil {
-		return nil, fmt.Errorf("DNS Query Error: %s", err)
-	}
-	return out, nil
-}
-
-func dohRequest(r *dns.Msg, resolver string) (*dns.Msg, error) {
-
-	c := &http.Client{}
-
-	pack, err := r.Pack()
-	if err != nil {
-		return nil, fmt.Errorf("Error packing record: %s", err)
-	}
-
-	request, err := http.NewRequest("POST", resolver, bytes.NewReader(pack))
-	if err != nil {
-		return nil, fmt.Errorf("Error creating HTTP request: %s", err)
-	}
-
-	request.Header.Set("Accept", "application/dns-message")
-	request.Header.Set("content-type", "application/dns-message")
-
-	resp, err := c.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request error: %s", err)
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP request failed - status: %s", resp.Status)
-	}
-
-	buffer := bytes.Buffer{}
-	_, err = buffer.ReadFrom(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Error reading HTTP body: %s", err)
-	}
-
-	out := new(dns.Msg)
-	if out.Unpack(buffer.Bytes()) != nil {
-		return nil, fmt.Errorf("Error parsing DNS response: %s", err)
-	}
-
-	return out, nil
-
 }
 
 func dnsErrorResponse(r *dns.Msg, rcode int, err error) *dns.Msg {
@@ -112,10 +62,15 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 		return
 	}
 
-	// Try each resolver
-	for i, resolver := range config.Upstream {
+	// Snapshot the upstream list to avoid data races with concurrent rotation.
+	config.RLock()
+	upstreams := append(config.Upstream[:0:0], config.Upstream...)
+	config.RUnlock()
 
-		out, err = resolver.Resolve(log, q)
+	// Try each resolver
+	for i, r := range upstreams {
+
+		out, err = r.Resolve(log, q)
 
 		if err == nil {
 			// If this is the first upstream clear the error count
@@ -132,18 +87,20 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 
 		// Upstream error - if this is the first upstream we count errors and try to switch if threshold exceeded
 		if i == 0 {
-			config.UpstreamErr += 1
+			config.Lock()
+			config.UpstreamErr++
 			if config.UpstreamErr > 3 {
 				// Demote upstream
-				config.Lock()
 				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
 				config.UpstreamErr = 0
+				demoted := config.Upstream
 				config.Unlock()
-				log.Printf("Error threshold exceeded - demoting upstream: %s", config.Upstream)
+				log.Printf("Error threshold exceeded - demoting upstream: %s", demoted)
+			} else {
+				config.Unlock()
 			}
-
 		}
-		log.Debugf("Upstream error <%s>: %s", resolver, err)
+		log.Debugf("Upstream error <%s>: %s", r, err)
 	}
 
 	// None of the resolvers worked
@@ -203,8 +160,11 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		logItem.Acl = true
 
-		// Check blocklist
-		if config.BlockList.Match(qname, qtype) {
+		// Check blocklist — read pointer under lock; refresh goroutine replaces it under the same lock
+		config.RLock()
+		bl := config.BlockList
+		config.RUnlock()
+		if bl.Match(qname, qtype) {
 			log.Debugf("Connection: %s/%s <%s %s> [blocked]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
 			logItem.Blocked = true
@@ -223,16 +183,17 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 		// If we get an empty answer for an AAAA request and DNS64 is configured try to generate DNS64 response
 		// (only for queries from IPv6 address)
 		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 && clientIP.To4() == nil {
-			// Try DNS64 lookup
-			q.Question[0].Qtype = dns.TypeA
-			dns64_out, err, cached := resolve(config, q)
+			// Try DNS64 lookup — use a copy so the original q (TypeAAAA) is preserved for error responses
+			q4 := q.Copy()
+			q4.Question[0].Qtype = dns.TypeA
+			dns64_out, err, cached := resolve(config, q4)
 			if err != nil {
 				log.Debugf("DNS64: %s/%s <%s %s> [upstream error]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 				w.WriteMsg(dnsErrorResponse(q, dns.RcodeServerFailure, errors.New("Upstream error")))
 				logItem.Error = true
 				return
 			}
-			// Rewrite response
+			// Rewrite response question to match the original AAAA query
 			dns64_out.Question[0].Qtype = dns.TypeAAAA
 			for i, rr := range dns64_out.Answer {
 				switch v := rr.(type) {
@@ -274,20 +235,25 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 	}
 }
 
+// CheckUpstream probes a single upstream resolver and returns an error if it
+// does not respond to a root NS query within the configured timeout.
+// Handles all three resolver types: plain UDP (host:port), DoT (tls://...),
+// and DoH (https://...).
 func CheckUpstream(upstream string) error {
-	_, err := resolveQname(upstream, ".", "NS")
-	if err != nil {
+	var r resolver.Resolver
+	switch {
+	case strings.HasPrefix(upstream, "https://"):
+		r = resolver.NewDohResolver(upstream)
+	case strings.HasPrefix(upstream, "tls://"):
+		r = resolver.NewDotResolver(upstream)
+	default:
+		r = resolver.NewUdpResolver(upstream)
+	}
+	log := logger.New(logger.NewDiscard(true))
+	q := new(dns.Msg)
+	q.SetQuestion(".", dns.TypeNS)
+	if _, err := r.Resolve(log, q); err != nil {
 		return fmt.Errorf("Invalid resolver: %s (%s)", upstream, err)
 	}
 	return nil
-}
-
-func resolveQname(resolver string, qname string, qtype string) (*dns.Msg, error) {
-	r := new(dns.Msg)
-	r.SetQuestion(qname, dns.StringToType[qtype])
-	if strings.HasPrefix(resolver, "https://") {
-		return dohRequest(r, resolver)
-	} else {
-		return dnsRequest(r, resolver)
-	}
 }

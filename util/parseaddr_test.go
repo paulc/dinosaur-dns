@@ -35,9 +35,13 @@ func TestParseAddr(t *testing.T) {
 	testParseAddr(t, "bare_ip6", "::1", 53, "[::1]:53", false)
 	testParseAddr(t, "bare_ip6", "2000:abcd:abcd::1", 53, "[2000:abcd:abcd::1]:53", false)
 	testParseAddr(t, "ip6:port", "[::1]:8053", 53, "[::1]:8053", false)
-	// Fails on Github CI (no lo0 interface?)
-	if !IsGH() {
-		testParseAddr(t, "interface", "lo0", 53, "127.0.0.1:53", false)
-		testParseAddr(t, "interface:port", "lo0:8053", 53, "127.0.0.1:8053", false)
+	// Interface lookup: test whichever loopback name exists on this OS
+	// (lo0 on macOS/FreeBSD, lo on Linux). Skip if neither is present.
+	for _, iface := range []string{"lo0", "lo"} {
+		if HasInterface(iface) {
+			testParseAddr(t, "interface", iface, 53, "127.0.0.1:53", false)
+			testParseAddr(t, "interface:port", iface+":8053", 53, "127.0.0.1:8053", false)
+			break
+		}
 	}
 }
