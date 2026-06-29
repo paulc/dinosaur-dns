@@ -91,9 +91,6 @@ async function loadConfig() {
 
 const RCODES = { 0:'NOERROR', 1:'FORMERR', 2:'SERVFAIL', 3:'NXDOMAIN', 4:'NOTIMP', 5:'REFUSED' };
 
-// Track domains blocked this session so the button state survives tab switches
-const blockedDomains = new Set();
-
 let logPaused = false;
 let pausedPos = 0;
 let logVisible = 20;
@@ -156,12 +153,10 @@ function renderLog() {
         const qcell = tr.insertCell();
         qcell.textContent = item.qname ?? '';
         if (item.acl && !item.blocked) {
-            const alreadyBlocked = blockedDomains.has(item.qname);
             const btn = document.createElement('button');
             btn.className = 'btn-sm blk';
-            btn.textContent = alreadyBlocked ? 'blocked' : 'block';
-            btn.disabled = alreadyBlocked;
-            if (!alreadyBlocked) btn.onclick = () => quickBlock(item.qname, btn);
+            btn.textContent = 'block';
+            btn.onclick = () => quickBlock(item.qname, btn);
             qcell.appendChild(document.createTextNode(' '));
             qcell.appendChild(btn);
         }
@@ -174,13 +169,20 @@ function renderLog() {
     setText('log-count', `${logBuf.length} buffered`);
 }
 
+// Mutate ring buffer entries in place so row colour, status, and button
+// all derive from the same item.blocked field rather than a separate set.
+function setDomainBlocked(qname, blocked) {
+    for (const item of logBuf.tail(logBuf.length)) {
+        if (item.qname === qname && item.acl) item.blocked = blocked;
+    }
+}
+
 async function quickBlock(qname, btn) {
     btn.disabled = true;
     try {
         await rpcCall('api.BlockListAdd', { entries: [qname] });
-        blockedDomains.add(qname);
-        btn.textContent = 'blocked';
-        scheduleLogRender(); // update all other rows with the same qname
+        setDomainBlocked(qname, true);
+        scheduleLogRender();
     } catch (e) {
         btn.textContent = 'err';
         btn.disabled = false;
@@ -252,7 +254,7 @@ function renderBlocklist() {
             const delName = row.qtype === 'ANY' ? row.name : `${row.name}:${row.qtype}`;
             try {
                 await rpcCall('api.BlockListDelete', { name: delName });
-                if (row.qtype === 'ANY') blockedDomains.delete(row.name);
+                if (row.qtype === 'ANY') setDomainBlocked(row.name, false);
                 const idx = blEntries.findIndex(e => e.name === row.name && e.qtype === row.qtype);
                 if (idx !== -1) blEntries.splice(idx, 1);
                 renderBlocklist();
@@ -298,7 +300,7 @@ async function deleteBlocklistEntry() {
         inp.value = '';
         showMsg(msg, result.found ? `Deleted: ${name}` : `Not found: ${name}`, !result.found);
         if (result.found) {
-            blockedDomains.delete(name.split(':')[0]);
+            setDomainBlocked(name.split(':')[0], false);
             scheduleLogRender();
             await loadBlocklist();
         }
