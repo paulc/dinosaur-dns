@@ -71,7 +71,7 @@ list.
 - `POST /api` -- JSON-RPC 2.0 endpoint (gorilla/rpc): Config, CacheAdd,
   CacheDelete, CacheDebug, BlockListCount, BlockListAdd, BlockListDelete
 - `GET /log` -- SSE stream of recent query log entries
-- `GET /static/*` -- embedded web dashboard (Alpine.js, Dygraph)
+- `GET /static/*` -- embedded web dashboard (plain JS, no external dependencies)
 
 Can bind to a TCP address or a UNIX domain socket. When using a socket,
 a signal handler removes the socket file before re-raising the signal so

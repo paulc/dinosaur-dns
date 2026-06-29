@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Dinosaur DNS</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;font-size:13px;color:#111;background:#fff;padding:10px 16px}
+
+.hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #111}
+.hdr h1{font-size:14px;font-weight:bold}
+.indicator{display:inline-block;width:9px;height:9px;border-radius:50%;background:#bbb;flex-shrink:0}
+.indicator.on{background:#4a4}
+.indicator.off{background:#c44}
+
+.stats-bar{display:flex;gap:24px;padding:6px 0 8px;border-bottom:1px solid #ddd;margin-bottom:10px}
+.stat .lbl{font-size:11px;color:#777;text-transform:uppercase}
+.stat .val{font-size:15px;font-weight:bold}
+
+nav{display:flex;border-bottom:1px solid #ccc;margin-bottom:12px}
+nav button{font-family:monospace;font-size:13px;padding:5px 16px;border:none;border-bottom:3px solid transparent;margin-bottom:-1px;background:none;cursor:pointer;color:#555}
+nav button:hover{background:#f5f5f5;color:#111}
+nav button.active{color:#111;font-weight:bold;border-bottom-color:#111}
+
+table{border-collapse:collapse;width:100%}
+th,td{padding:2px 7px;text-align:left;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+th{background:#f6f6f6;border-bottom:2px solid #bbb;font-weight:bold;position:sticky;top:0;z-index:1}
+tr.blocked td{background:#fde8e8}
+tr.cached td{background:#e8f5e8}
+tr.error td{background:#fff3e0}
+.tbl-wrap{max-height:60vh;overflow-y:auto;border:1px solid #ddd}
+
+input[type=text]{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 5px;outline:none}
+input[type=text]:focus{border-color:#777}
+textarea{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:4px 5px;resize:vertical;outline:none}
+textarea:focus{border-color:#777}
+select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4px}
+.btn{font-family:monospace;font-size:12px;padding:3px 10px;border:1px solid #999;background:#f5f5f5;cursor:pointer;color:#111}
+.btn:hover{background:#e8e8e8}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-sm{font-family:monospace;font-size:11px;padding:1px 5px;border:1px solid #bbb;background:#fff;cursor:pointer}
+.btn-sm:disabled{opacity:.4;cursor:default}
+.btn-sm.blk{border-color:#c88;color:#c00;background:#fff8f8}
+.btn-sm.blk:hover{background:#fee}
+
+.row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.msg-ok{color:#060}
+.msg-err{color:#c00}
+
+.flt-input{width:100%;font-size:11px!important;padding:1px 4px!important}
+.flt-cell{padding:2px 3px!important;border-bottom:1px solid #ddd!important;background:#fafafa!important}
+
+#config-pre{font-family:monospace;font-size:12px;white-space:pre;overflow:auto;background:#fafafa;border:1px solid #ddd;padding:8px;max-height:55vh;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <span id="indicator" class="indicator" title="connecting..."></span>
+  <h1>Dinosaur DNS</h1>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="lbl">queries</div><div class="val" id="stat-total">0</div></div>
+  <div class="stat"><div class="lbl">blocked</div><div class="val" id="stat-blocked">0</div></div>
+  <div class="stat"><div class="lbl">acl</div><div class="val" id="stat-acl">0</div></div>
+  <div class="stat"><div class="lbl">errors</div><div class="val" id="stat-errors">0</div></div>
+  <div class="stat"><div class="lbl">rate</div><div class="val" id="stat-rate">0/min</div></div>
+</div>
+
+<nav>
+  <button class="active" data-tab="status">Status</button>
+  <button data-tab="log">Log</button>
+  <button data-tab="blocklist">Blocklist</button>
+  <button data-tab="cache">Cache</button>
+</nav>
+
+<!-- Status -->
+<section id="tab-status" class="tab">
+  <div class="row" style="padding:4px 0;margin-bottom:8px">
+    Blocklist entries: <strong id="status-blcount">—</strong>
+  </div>
+  <pre id="config-pre">loading...</pre>
+</section>
+
+<!-- Log -->
+<section id="tab-log" class="tab" hidden>
+  <div class="row" style="margin-bottom:8px">
+    Show <select id="log-visible">
+      <option>10</option><option selected>20</option><option>50</option><option>100</option>
+    </select>
+    <label><input type="checkbox" id="log-pause"> Pause</label>
+    <button class="btn" id="log-prev">&lt; prev</button>
+    <button class="btn" id="log-next">next &gt;</button>
+    <button class="btn" id="filter-clear">clear filter</button>
+    <span id="log-count" style="color:#888;font-size:11px"></span>
+  </div>
+  <div class="tbl-wrap">
+    <table style="table-layout:fixed">
+      <colgroup>
+        <col style="width:8%"><col style="width:18%"><col style="width:33%">
+        <col style="width:6%"><col style="width:10%"><col style="width:11%"><col style="width:8%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Time</th><th>Client</th><th>Qname</th>
+          <th>Type</th><th>Rcode</th><th>Status</th><th>ms</th>
+        </tr>
+        <tr>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-date" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-client" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-qname" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-qtype" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-rcode" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-status" placeholder="filter"></td>
+          <td class="flt-cell"></td>
+        </tr>
+      </thead>
+      <tbody id="log-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Blocklist -->
+<section id="tab-blocklist" class="tab" hidden>
+  <div class="row" style="padding:4px 0;margin-bottom:8px">
+    Entries: <strong id="bl-count">—</strong>
+    <button class="btn" id="bl-refresh-btn">Refresh</button>
+  </div>
+  <div id="bl-msg" style="min-height:1.3em;margin-bottom:6px"></div>
+
+  <div style="margin-bottom:14px">
+    <div style="margin-bottom:4px">Add entries (one per line):</div>
+    <textarea id="bl-add" rows="5" style="width:400px;display:block"></textarea>
+    <button class="btn" id="bl-add-btn" style="margin-top:4px">Add</button>
+  </div>
+
+  <div>
+    <div style="margin-bottom:4px">Delete entry:</div>
+    <div class="row">
+      <input type="text" id="bl-del" style="width:300px" placeholder="domain name">
+      <button class="btn" id="bl-del-btn">Delete</button>
+    </div>
+  </div>
+</section>
+
+<!-- Cache -->
+<section id="tab-cache" class="tab" hidden>
+  <div class="row" style="padding:4px 0;margin-bottom:8px">
+    Entries: <strong id="cache-count">—</strong>
+    <button class="btn" id="cache-refresh">Refresh</button>
+  </div>
+  <div class="row" style="margin-bottom:10px">
+    <input type="text" id="cache-add" style="width:440px" placeholder="RR string  e.g.  host.local. 3600 IN A 192.168.1.1">
+    <button class="btn" id="cache-add-btn">Add permanent</button>
+    <span id="cache-msg"></span>
+  </div>
+  <div class="tbl-wrap">
+    <table style="table-layout:fixed">
+      <colgroup>
+        <col style="width:45%"><col style="width:10%"><col style="width:33%"><col style="width:12%">
+      </colgroup>
+      <thead>
+        <tr><th>Name</th><th>Type</th><th>TTL / Status</th><th></th></tr>
+      </thead>
+      <tbody id="cache-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
