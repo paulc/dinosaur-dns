@@ -71,6 +71,11 @@ func MakeApiHandler(config *config.ProxyConfig) func() {
 
 		router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "PONG") })
 
+		// Redirect root to dashboard
+		router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/static/index.html", http.StatusFound)
+		})
+
 		// API
 		router.Handle("/api", apiServer)
 

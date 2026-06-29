@@ -4,15 +4,61 @@ import { Buffer } from './buffer.js';
 const rpc = new RPC('/api');
 const logBuf = new Buffer(1000);
 
+// --- Block pause ---
+
+let pauseEndTime = null;
+let pauseCountdownTimer = null;
+
+async function checkBlockingStatus() {
+    try {
+        const result = await rpcCall('api.GetBlockingStatus', {});
+        if (result.paused) {
+            pauseEndTime = new Date(Date.now() + result.remaining_seconds * 1000);
+            showPauseWarning();
+        } else {
+            endPauseWarning();
+        }
+    } catch { /* ignore — server may not be reachable yet */ }
+}
+
+function showPauseWarning() {
+    document.getElementById('pause-warning').hidden = false;
+    updatePauseCountdown();
+    if (!pauseCountdownTimer) {
+        pauseCountdownTimer = setInterval(() => {
+            if (pauseEndTime && Date.now() < pauseEndTime.getTime()) {
+                updatePauseCountdown();
+            } else {
+                endPauseWarning();
+            }
+        }, 1000);
+    }
+}
+
+function endPauseWarning() {
+    document.getElementById('pause-warning').hidden = true;
+    clearInterval(pauseCountdownTimer);
+    pauseCountdownTimer = null;
+    pauseEndTime = null;
+}
+
+function updatePauseCountdown() {
+    if (!pauseEndTime) return;
+    const remaining = Math.max(0, Math.round((pauseEndTime.getTime() - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    setText('pause-countdown', m > 0 ? `${m}m ${s}s` : `${s}s`);
+}
+
 // --- Stats ---
 
-const stats = { total: 0, blocked: 0, aclBlocked: 0, errors: 0, recent: [] };
+const stats = { total: 0, blocked: 0, aclBlocked: 0, errors: 0 };
 
-function qpm() {
-    const cutoff = Date.now() - 60000;
-    stats.recent = stats.recent.filter(t => t > cutoff);
-    return stats.recent.length;
-}
+// Tick-based EMA rate (queries/min). Updated every EMA_TICK ms regardless of traffic.
+const EMA_TICK  = 1000;  // ms between ticks
+const EMA_ALPHA = 0.5;   // smoothing factor; half-life ~1s
+let emaRate    = 0;
+let emaTick    = 0;      // query count accumulated since last tick
 
 function renderStats() {
     const pct = n => stats.total ? ` (${(n * 100 / stats.total).toFixed(1)}%)` : '';
@@ -20,7 +66,14 @@ function renderStats() {
     setText('stat-blocked', `${stats.blocked}${pct(stats.blocked)}`);
     setText('stat-acl',     `${stats.aclBlocked}${pct(stats.aclBlocked)}`);
     setText('stat-errors',  `${stats.errors}${pct(stats.errors)}`);
-    setText('stat-rate',    `${qpm()}/min`);
+    setText('stat-rate',    `${emaRate.toFixed(1)}/min`);
+}
+
+function tickEMA() {
+    const instantRate = emaTick * (60000 / EMA_TICK); // scale tick count to per-minute
+    emaRate = EMA_ALPHA * instantRate + (1 - EMA_ALPHA) * emaRate;
+    emaTick = 0;
+    renderStats();
 }
 
 // --- Connection ---
@@ -42,7 +95,7 @@ function startSSE() {
         item.date = new Date(item.timestamp);
         logBuf.push(item);
         stats.total++;
-        stats.recent.push(item.date.getTime());
+        emaTick++;
         if (!item.acl)        stats.aclBlocked++;
         else if (item.blocked) stats.blocked++;
         else if (item.error)   stats.errors++;
@@ -61,7 +114,7 @@ function showTab(id) {
     document.getElementById('tab-' + id).hidden = false;
     document.querySelector(`nav button[data-tab="${id}"]`).classList.add('active');
     currentTab = id;
-    if (id === 'config')    loadConfig();
+    if (id === 'config')    { loadConfig(); loadChanges(); }
     if (id === 'blocklist') loadBlocklist();
     if (id === 'cache')     loadCache();
     if (id === 'log')       scheduleLogRender();
@@ -87,12 +140,47 @@ async function loadConfig() {
     }
 }
 
+async function loadChanges() {
+    try {
+        const result = await rpcCall('api.GetChanges', {});
+        renderChanges(result);
+    } catch (e) {
+        document.getElementById('changes-blocks').textContent = 'Error: ' + e.message;
+        document.getElementById('changes-rrs').textContent = '';
+    }
+}
+
+function renderChanges(result) {
+    const blocks       = result.blocks ?? [];
+    const blockDeletes = result.block_deletes ?? [];
+    const rrs          = result.local_rrs ?? [];
+    const rrPtrs       = result.local_rr_ptrs ?? [];
+    const rrDeletes    = result.local_rr_deletes ?? [];
+
+    const bPre = document.getElementById('changes-blocks');
+    const rPre = document.getElementById('changes-rrs');
+
+    const blockLines = [
+        ...blocks.map(d => `-block ${d}`),
+        ...blockDeletes.map(d => `-block-delete ${d}`),
+    ];
+    bPre.textContent = blockLines.length ? blockLines.join('\n') : '(none)';
+
+    const rrLines = [
+        ...rrs.map(r => `-localrr "${r}"`),
+        ...rrPtrs.map(r => `-localrr-ptr "${r}"`),
+        ...rrDeletes.map(k => `# deleted: ${k}`),
+    ];
+    rPre.textContent = rrLines.length ? rrLines.join('\n') : '(none)';
+}
+
 // --- Log tab ---
 
 const RCODES = { 0:'NOERROR', 1:'FORMERR', 2:'SERVFAIL', 3:'NXDOMAIN', 4:'NOTIMP', 5:'REFUSED' };
 
 let logPaused = false;
 let pausedPos = 0;
+let logPageOffset = 0;  // offset in filtered-item space from the anchor; 0 = newest
 let logVisible = 20;
 let logFilter = null;
 let logPending = false;
@@ -136,8 +224,8 @@ function scheduleLogRender() {
 function renderLog() {
     logPending = false;
     if (currentTab !== 'log') return;
-    const pos = logPaused ? pausedPos : undefined;
-    const rows = logBuf.filter(logVisible, logFilter, pos);
+    const anchor = logPaused ? pausedPos : logBuf.getPosition();
+    const rows = logBuf.filter(logVisible, logFilter, anchor, logPageOffset);
     const tbody = document.getElementById('log-tbody');
     tbody.innerHTML = '';
     for (const item of rows) {
@@ -152,13 +240,23 @@ function renderLog() {
 
         const qcell = tr.insertCell();
         qcell.textContent = item.qname ?? '';
-        if (item.acl && !item.blocked) {
-            const btn = document.createElement('button');
-            btn.className = 'btn-sm blk';
-            btn.textContent = 'block';
-            btn.onclick = () => quickBlock(item.qname, btn);
-            qcell.appendChild(document.createTextNode(' '));
-            qcell.appendChild(btn);
+
+        if (item.acl) {
+            if (!item.blocked) {
+                const btn = document.createElement('button');
+                btn.className = 'btn-sm blk log-btn';
+                btn.textContent = 'block';
+                btn.onclick = () => quickBlock(item.qname, btn);
+                qcell.appendChild(document.createTextNode(' '));
+                qcell.appendChild(btn);
+            } else {
+                const btn = document.createElement('button');
+                btn.className = 'btn-sm ublk log-btn';
+                btn.textContent = 'unblock';
+                btn.onclick = () => quickUnblock(item.qname, btn);
+                qcell.appendChild(document.createTextNode(' '));
+                qcell.appendChild(btn);
+            }
         }
 
         tr.insertCell().textContent = item.qtype ?? '';
@@ -166,7 +264,14 @@ function renderLog() {
         tr.insertCell().textContent = status;
         tr.insertCell().textContent = item.querytime ? (item.querytime * 1000).toFixed(1) : '';
     }
-    setText('log-count', `${logBuf.length} buffered`);
+    const totalMatching = logFilter ? logBuf.countFiltered(logFilter, anchor) : logBuf.calculateAvailable(anchor);
+    const from = rows.length ? logPageOffset + 1 : 0;
+    const to   = logPageOffset + rows.length;
+    let countText = logFilter
+        ? `${from}-${to} of ${totalMatching} matching  (${logBuf.length} buffered)`
+        : `${from}-${to} of ${logBuf.length} buffered`;
+    if (!rows.length) countText = logFilter ? `0 matching  (${logBuf.length} buffered)` : `${logBuf.length} buffered`;
+    setText('log-count', countText);
 }
 
 // Mutate ring buffer entries in place so row colour, status, and button
@@ -182,6 +287,18 @@ async function quickBlock(qname, btn) {
     try {
         await rpcCall('api.BlockListAdd', { entries: [qname] });
         setDomainBlocked(qname, true);
+        scheduleLogRender();
+    } catch (e) {
+        btn.textContent = 'err';
+        btn.disabled = false;
+    }
+}
+
+async function quickUnblock(qname, btn) {
+    btn.disabled = true;
+    try {
+        await rpcCall('api.BlockListDelete', { name: qname });
+        setDomainBlocked(qname, false);
         scheduleLogRender();
     } catch (e) {
         btn.textContent = 'err';
@@ -312,39 +429,26 @@ async function deleteBlocklistEntry() {
 // --- Cache tab ---
 
 async function loadCache() {
-    const tbody = document.getElementById('cache-tbody');
     try {
         const result = await rpcCall('api.CacheDebug', {});
         const entries = (result.entries ?? []).sort();
-        setText('cache-count', entries.length);
-        tbody.innerHTML = '';
+
+        const permanent = [];
+        const cached    = [];
         for (const s of entries) {
             const m = s.match(/^<(.+) (\w+)> (.+)$/);
             if (!m) continue;
             const [, name, qtype, ttl] = m;
-            const tr = tbody.insertRow();
-            tr.insertCell().textContent = name;
-            tr.insertCell().textContent = qtype;
-            tr.insertCell().textContent = ttl;
-            const cell = tr.insertCell();
-            const btn = document.createElement('button');
-            btn.className = 'btn-sm';
-            btn.textContent = 'delete';
-            btn.onclick = async () => {
-                btn.disabled = true;
-                try {
-                    await rpcCall('api.CacheDelete', { name, qtype, ptr: false });
-                    tr.remove();
-                    const el = document.getElementById('cache-count');
-                    el.textContent = parseInt(el.textContent) - 1;
-                } catch (e) {
-                    btn.disabled = false;
-                }
-            };
-            cell.appendChild(btn);
+            if (ttl === 'permanent') permanent.push({ name, qtype, ttl });
+            else                     cached.push({ name, qtype, ttl });
         }
+
+        setText('cache-perm-count',   permanent.length);
+        setText('cache-cached-count', cached.length);
+        renderCacheTable(permanent, 'cache-perm-tbody',   true);
+        renderCacheTable(cached,    'cache-cached-tbody', false);
     } catch (e) {
-        const tr = tbody.insertRow();
+        const tr = document.getElementById('cache-perm-tbody').insertRow();
         const cell = tr.insertCell();
         cell.colSpan = 4;
         cell.className = 'msg-err';
@@ -352,15 +456,43 @@ async function loadCache() {
     }
 }
 
-async function addCacheEntry() {
+function renderCacheTable(entries, tbodyId, isPerm) {
+    const tbody = document.getElementById(tbodyId);
+    tbody.innerHTML = '';
+    for (const { name, qtype, ttl } of entries) {
+        const tr = tbody.insertRow();
+        tr.insertCell().textContent = name;
+        tr.insertCell().textContent = qtype;
+        tr.insertCell().textContent = ttl;
+        const cell = tr.insertCell();
+        const btn = document.createElement('button');
+        btn.className = 'btn-sm';
+        btn.textContent = 'delete';
+        btn.onclick = async () => {
+            btn.disabled = true;
+            try {
+                await rpcCall('api.CacheDelete', { name, qtype, ptr: false });
+                tr.remove();
+                const countId = isPerm ? 'cache-perm-count' : 'cache-cached-count';
+                const el = document.getElementById(countId);
+                el.textContent = parseInt(el.textContent) - 1;
+            } catch (e) {
+                btn.disabled = false;
+            }
+        };
+        cell.appendChild(btn);
+    }
+}
+
+async function addCacheEntry(withPtr) {
     const inp = document.getElementById('cache-add');
     const rr = inp.value.trim();
     if (!rr) return;
     const msg = document.getElementById('cache-msg');
     try {
-        await rpcCall('api.CacheAdd', { rr, permanent: true, ptr: false });
+        await rpcCall('api.CacheAdd', { rr, permanent: true, ptr: withPtr });
         inp.value = '';
-        showMsg(msg, 'Added', false);
+        showMsg(msg, withPtr ? 'Added with PTR' : 'Added', false);
         loadCache();
     } catch (e) {
         showMsg(msg, 'Error: ' + e.message, true);
@@ -397,31 +529,37 @@ document.addEventListener('DOMContentLoaded', () => {
     pauseChk.addEventListener('change', () => {
         logPaused = pauseChk.checked;
         if (logPaused) pausedPos = logBuf.getPosition();
+        logPageOffset = 0;
         scheduleLogRender();
     });
 
     document.getElementById('log-prev').addEventListener('click', () => {
-        if (!logPaused) return;
-        const avail = logBuf.calculateAvailable(pausedPos);
-        if (avail - logVisible > 0) pausedPos = logBuf.wrapPos(pausedPos - logVisible);
+        if (!logPaused) {
+            logPaused = true;
+            pauseChk.checked = true;
+            pausedPos = logBuf.getPosition();
+            logPageOffset = 0;
+        }
+        const anchor = pausedPos;
+        const total = logFilter ? logBuf.countFiltered(logFilter, anchor) : logBuf.calculateAvailable(anchor);
+        if (logPageOffset + logVisible < total) logPageOffset += logVisible;
         scheduleLogRender();
     });
 
     document.getElementById('log-next').addEventListener('click', () => {
         if (!logPaused) return;
-        if (logBuf.calculateAvailable(pausedPos) < logBuf.length) {
-            pausedPos = logBuf.wrapPos(pausedPos + logVisible);
-        }
+        logPageOffset = Math.max(0, logPageOffset - logVisible);
         scheduleLogRender();
     });
 
     document.querySelectorAll('.filter-input').forEach(inp => {
-        inp.addEventListener('input', () => { buildFilter(); scheduleLogRender(); });
+        inp.addEventListener('input', () => { buildFilter(); logPageOffset = 0; scheduleLogRender(); });
     });
 
     document.getElementById('filter-clear').addEventListener('click', () => {
         document.querySelectorAll('.filter-input').forEach(inp => { inp.value = ''; });
         logFilter = null;
+        logPageOffset = 0;
         scheduleLogRender();
     });
 
@@ -450,11 +588,57 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('cache-refresh').addEventListener('click', loadCache);
-    document.getElementById('cache-add-btn').addEventListener('click', addCacheEntry);
+    document.getElementById('cache-add-btn').addEventListener('click', () => addCacheEntry(false));
+    document.getElementById('cache-add-ptr-btn').addEventListener('click', () => addCacheEntry(true));
     document.getElementById('cache-add').addEventListener('keydown', e => {
-        if (e.key === 'Enter') addCacheEntry();
+        if (e.key === 'Enter') addCacheEntry(false);
     });
 
+    document.getElementById('merge-config-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('merge-config-btn');
+        const msg = document.getElementById('merge-msg');
+        const pre = document.getElementById('merged-config-pre');
+        btn.disabled = true;
+        try {
+            const result = await rpcCall('api.GetMergedConfig', {});
+            pre.textContent = result.config;
+            pre.hidden = false;
+            showMsg(msg, 'Generated', false);
+        } catch (e) {
+            showMsg(msg, 'Error: ' + e.message, true);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('pause-btn').addEventListener('click', async () => {
+        const seconds = parseInt(document.getElementById('pause-seconds').value) || 300;
+        try {
+            const result = await rpcCall('api.PauseBlocking', { seconds });
+            if (result.paused) {
+                pauseEndTime = new Date(Date.now() + result.remaining_seconds * 1000);
+                showPauseWarning();
+            }
+            showMsg(document.getElementById('bl-pause-msg'), `Paused for ${seconds}s`, false);
+        } catch (e) {
+            showMsg(document.getElementById('bl-pause-msg'), 'Error: ' + e.message, true);
+        }
+    });
+
+    const resumeHandler = async () => {
+        try {
+            await rpcCall('api.ResumeBlocking', {});
+            endPauseWarning();
+        } catch (e) {
+            showMsg(document.getElementById('bl-pause-msg'), 'Error: ' + e.message, true);
+        }
+    };
+    document.getElementById('resume-btn').addEventListener('click', resumeHandler);
+    document.getElementById('pause-resume-quick').addEventListener('click', resumeHandler);
+
+    setInterval(checkBlockingStatus, 5000);
+    checkBlockingStatus();
+    setInterval(tickEMA, EMA_TICK);
     startSSE();
     showTab('log');
 });

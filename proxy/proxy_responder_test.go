@@ -403,12 +403,12 @@ func TestHandlerDns64(t *testing.T) {
 
 	rw := NewTestResponseWriter()
 
-	// Test with IPv4 client
+	// DNS64 synthesis applies to all clients regardless of address family
 	q := util.CreateQuery("127.0.0.1.nip.io.", "AAAA")
-	handler(rw, q)
 
-	// Expect nil response
-	util.CheckResponseEmpty(t, q, rw.outmsg)
+	// Test with IPv4 client
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "64:ff9b::7f00:1")
 
 	// Test with IPv6 client
 	rw.remote = &net.UDPAddr{IP: net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
@@ -416,8 +416,6 @@ func TestHandlerDns64(t *testing.T) {
 	rw.outbuf = bytes.Buffer{}
 
 	handler(rw, q)
-
-	// Expect DNS64 response
 	util.CheckResponse(t, q, rw.outmsg, "64:ff9b::7f00:1")
 }
 
@@ -432,12 +430,11 @@ func TestHandlerDns64Prefix(t *testing.T) {
 
 	rw := NewTestResponseWriter()
 
-	// Test with IPv4 client
 	q := util.CreateQuery("127.0.0.1.nip.io.", "AAAA")
-	handler(rw, q)
 
-	// Expect nil response
-	util.CheckResponseEmpty(t, q, rw.outmsg)
+	// Test with IPv4 client
+	handler(rw, q)
+	util.CheckResponse(t, q, rw.outmsg, "1111::7f00:1")
 
 	// Test with IPv6 client
 	rw.remote = &net.UDPAddr{IP: net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
@@ -445,7 +442,5 @@ func TestHandlerDns64Prefix(t *testing.T) {
 	rw.outbuf = bytes.Buffer{}
 
 	handler(rw, q)
-
-	// Expect DNS64 response
 	util.CheckResponse(t, q, rw.outmsg, "1111::7f00:1")
 }

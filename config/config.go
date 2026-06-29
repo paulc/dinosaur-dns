@@ -20,6 +20,7 @@ type ProxyConfig struct {
 	Cache           *cache.DNSCache
 	CacheFlush      time.Duration
 	BlockList       *blocklist.BlockList
+	BlockPauseUntil time.Time // zero = not paused
 	Acl             []net.IPNet
 	Dns64           bool
 	Dns64Prefix     net.IPNet
