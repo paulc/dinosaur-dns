@@ -180,6 +180,7 @@ async function quickBlock(qname, btn) {
         await rpcCall('api.BlockListAdd', { entries: [qname] });
         blockedDomains.add(qname);
         btn.textContent = 'blocked';
+        scheduleLogRender(); // update all other rows with the same qname
     } catch (e) {
         btn.textContent = 'err';
         btn.disabled = false;
@@ -251,6 +252,7 @@ function renderBlocklist() {
             const delName = row.qtype === 'ANY' ? row.name : `${row.name}:${row.qtype}`;
             try {
                 await rpcCall('api.BlockListDelete', { name: delName });
+                if (row.qtype === 'ANY') blockedDomains.delete(row.name);
                 const idx = blEntries.findIndex(e => e.name === row.name && e.qtype === row.qtype);
                 if (idx !== -1) blEntries.splice(idx, 1);
                 renderBlocklist();
@@ -294,7 +296,10 @@ async function deleteBlocklistEntry() {
         const result = await rpcCall('api.BlockListDelete', { name });
         inp.value = '';
         showMsg(msg, result.found ? `Deleted: ${name}` : `Not found: ${name}`, !result.found);
-        if (result.found) await loadBlocklist();
+        if (result.found) {
+            blockedDomains.delete(name.split(':')[0]);
+            await loadBlocklist();
+        }
     } catch (e) {
         showMsg(msg, 'Error: ' + e.message, true);
     }
