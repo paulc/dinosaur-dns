@@ -1,3 +1,5 @@
+<img src="./data/dinosaur.svg" width="360" />
+
 # Dinosaur DNS
 
 A DNS caching proxy for local networks. Supports UDP, DNS-over-TLS (DoT),
