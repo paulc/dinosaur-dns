@@ -4,7 +4,7 @@ import { Buffer } from './buffer.js';
 const rpc = new RPC('/api');
 const logBuf = new Buffer(1000);
 
-// ── Stats ──────────────────────────────────────────────────────────────────────
+// --- Stats ---
 
 const stats = { total: 0, blocked: 0, aclBlocked: 0, errors: 0, recent: [] };
 
@@ -23,7 +23,7 @@ function renderStats() {
     setText('stat-rate',    `${qpm()}/min`);
 }
 
-// ── Connection ─────────────────────────────────────────────────────────────────
+// --- Connection ---
 
 function setConnected(ok) {
     const el = document.getElementById('indicator');
@@ -31,7 +31,7 @@ function setConnected(ok) {
     el.title = ok ? 'SSE connected' : 'SSE disconnected';
 }
 
-// ── SSE ───────────────────────────────────────────────────────────────────────
+// --- SSE ---
 
 function startSSE() {
     const es = new EventSource('/log');
@@ -51,9 +51,9 @@ function startSSE() {
     };
 }
 
-// ── Navigation ────────────────────────────────────────────────────────────────
+// --- Navigation ---
 
-let currentTab = 'status';
+let currentTab = 'log';
 
 function showTab(id) {
     document.querySelectorAll('section.tab').forEach(s => { s.hidden = true; });
@@ -61,13 +61,13 @@ function showTab(id) {
     document.getElementById('tab-' + id).hidden = false;
     document.querySelector(`nav button[data-tab="${id}"]`).classList.add('active');
     currentTab = id;
-    if (id === 'status')    loadStatus();
+    if (id === 'config')    loadConfig();
     if (id === 'blocklist') loadBlocklist();
     if (id === 'cache')     loadCache();
     if (id === 'log')       scheduleLogRender();
 }
 
-// ── RPC helper ────────────────────────────────────────────────────────────────
+// --- RPC helper ---
 
 async function rpcCall(method, params) {
     const r = await rpc.call(method, params);
@@ -75,9 +75,9 @@ async function rpcCall(method, params) {
     return r.result;
 }
 
-// ── Status tab ────────────────────────────────────────────────────────────────
+// --- Config tab ---
 
-async function loadStatus() {
+async function loadConfig() {
     const pre = document.getElementById('config-pre');
     try {
         const result = await rpcCall('api.Config', {});
@@ -85,17 +85,14 @@ async function loadStatus() {
     } catch (e) {
         pre.textContent = 'Error: ' + e.message;
     }
-    try {
-        const result = await rpcCall('api.BlockListCount', {});
-        setText('status-blcount', result.count);
-    } catch (e) {
-        setText('status-blcount', 'error');
-    }
 }
 
-// ── Log tab ───────────────────────────────────────────────────────────────────
+// --- Log tab ---
 
 const RCODES = { 0:'NOERROR', 1:'FORMERR', 2:'SERVFAIL', 3:'NXDOMAIN', 4:'NOTIMP', 5:'REFUSED' };
+
+// Track domains blocked this session so the button state survives tab switches
+const blockedDomains = new Set();
 
 let logPaused = false;
 let pausedPos = 0;
@@ -159,10 +156,12 @@ function renderLog() {
         const qcell = tr.insertCell();
         qcell.textContent = item.qname ?? '';
         if (item.acl && !item.blocked) {
+            const alreadyBlocked = blockedDomains.has(item.qname);
             const btn = document.createElement('button');
             btn.className = 'btn-sm blk';
-            btn.textContent = 'block';
-            btn.onclick = () => quickBlock(item.qname, btn);
+            btn.textContent = alreadyBlocked ? 'blocked' : 'block';
+            btn.disabled = alreadyBlocked;
+            if (!alreadyBlocked) btn.onclick = () => quickBlock(item.qname, btn);
             qcell.appendChild(document.createTextNode(' '));
             qcell.appendChild(btn);
         }
@@ -179,6 +178,7 @@ async function quickBlock(qname, btn) {
     btn.disabled = true;
     try {
         await rpcCall('api.BlockListAdd', { entries: [qname] });
+        blockedDomains.add(qname);
         btn.textContent = 'blocked';
     } catch (e) {
         btn.textContent = 'err';
@@ -186,14 +186,87 @@ async function quickBlock(qname, btn) {
     }
 }
 
-// ── Blocklist tab ─────────────────────────────────────────────────────────────
+// --- Blocklist tab ---
+
+let blEntries = [];
+let blFilterText = '';
+let blSort = { col: 'name', dir: 1 };
 
 async function loadBlocklist() {
     try {
-        const result = await rpcCall('api.BlockListCount', {});
-        setText('bl-count', result.count);
+        const result = await rpcCall('api.BlockListList', {});
+        blEntries = [];
+        for (const entry of result.entries ?? []) {
+            const name = entry.name.replace(/\.$/, '');
+            for (const qtype of entry.block) {
+                blEntries.push({ name, qtype });
+            }
+        }
+        renderBlocklist();
     } catch (e) {
-        setText('bl-count', 'error');
+        const tbody = document.getElementById('bl-tbody');
+        tbody.innerHTML = '';
+        const tr = tbody.insertRow();
+        const cell = tr.insertCell();
+        cell.colSpan = 3;
+        cell.className = 'msg-err';
+        cell.textContent = 'Error: ' + e.message;
+    }
+}
+
+function renderBlocklist() {
+    setText('bl-count', blEntries.length);
+
+    let rows = blEntries;
+    if (blFilterText) {
+        try {
+            const re = new RegExp(blFilterText, 'i');
+            rows = rows.filter(r => re.test(r.name) || re.test(r.qtype));
+        } catch { /* invalid regex */ }
+    }
+
+    const { col, dir } = blSort;
+    rows = [...rows].sort((a, b) => a[col].localeCompare(b[col]) * dir);
+
+    const nameHdr = document.getElementById('bl-hdr-name');
+    const typeHdr = document.getElementById('bl-hdr-type');
+    nameHdr.textContent = 'Name' + (col === 'name'  ? (dir > 0 ? ' ^' : ' v') : '');
+    typeHdr.textContent = 'Type' + (col === 'qtype' ? (dir > 0 ? ' ^' : ' v') : '');
+
+    const LIMIT = 500;
+    const shown = rows.slice(0, LIMIT);
+    const tbody = document.getElementById('bl-tbody');
+    tbody.innerHTML = '';
+
+    for (const row of shown) {
+        const tr = tbody.insertRow();
+        tr.insertCell().textContent = row.name;
+        tr.insertCell().textContent = row.qtype;
+        const cell = tr.insertCell();
+        const btn = document.createElement('button');
+        btn.className = 'btn-sm';
+        btn.textContent = 'delete';
+        btn.onclick = async () => {
+            btn.disabled = true;
+            const delName = row.qtype === 'ANY' ? row.name : `${row.name}:${row.qtype}`;
+            try {
+                await rpcCall('api.BlockListDelete', { name: delName });
+                const idx = blEntries.findIndex(e => e.name === row.name && e.qtype === row.qtype);
+                if (idx !== -1) blEntries.splice(idx, 1);
+                renderBlocklist();
+            } catch (e) {
+                btn.disabled = false;
+            }
+        };
+        cell.appendChild(btn);
+    }
+
+    if (rows.length > LIMIT) {
+        const tr = tbody.insertRow();
+        const cell = tr.insertCell();
+        cell.colSpan = 3;
+        cell.style.color = '#888';
+        cell.textContent = `Showing ${LIMIT} of ${rows.length} entries -- refine filter to see more`;
     }
 }
 
@@ -206,7 +279,7 @@ async function addBlocklistEntries() {
         await rpcCall('api.BlockListAdd', { entries });
         ta.value = '';
         showMsg(msg, `Added ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`, false);
-        loadBlocklist();
+        await loadBlocklist();
     } catch (e) {
         showMsg(msg, 'Error: ' + e.message, true);
     }
@@ -221,13 +294,13 @@ async function deleteBlocklistEntry() {
         const result = await rpcCall('api.BlockListDelete', { name });
         inp.value = '';
         showMsg(msg, result.found ? `Deleted: ${name}` : `Not found: ${name}`, !result.found);
-        loadBlocklist();
+        if (result.found) await loadBlocklist();
     } catch (e) {
         showMsg(msg, 'Error: ' + e.message, true);
     }
 }
 
-// ── Cache tab ─────────────────────────────────────────────────────────────────
+// --- Cache tab ---
 
 async function loadCache() {
     const tbody = document.getElementById('cache-tbody');
@@ -272,11 +345,11 @@ async function loadCache() {
 
 async function addCacheEntry() {
     const inp = document.getElementById('cache-add');
-    const entry = inp.value.trim();
-    if (!entry) return;
+    const rr = inp.value.trim();
+    if (!rr) return;
     const msg = document.getElementById('cache-msg');
     try {
-        await rpcCall('api.CacheAdd', { entry, permanent: true, ptr: false });
+        await rpcCall('api.CacheAdd', { rr, permanent: true, ptr: false });
         inp.value = '';
         showMsg(msg, 'Added', false);
         loadCache();
@@ -285,7 +358,7 @@ async function addCacheEntry() {
     }
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
+// --- Utilities ---
 
 function setText(id, text) {
     const el = document.getElementById(id);
@@ -299,7 +372,7 @@ function showMsg(el, text, isError) {
     el._timer = setTimeout(() => { el.textContent = ''; el.className = ''; }, 4000);
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// --- Init ---
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('nav button[data-tab]').forEach(btn => {
@@ -349,6 +422,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('bl-del').addEventListener('keydown', e => {
         if (e.key === 'Enter') deleteBlocklistEntry();
     });
+    document.getElementById('bl-filter').addEventListener('input', e => {
+        blFilterText = e.target.value;
+        renderBlocklist();
+    });
+    document.getElementById('bl-filter-clear').addEventListener('click', () => {
+        document.getElementById('bl-filter').value = '';
+        blFilterText = '';
+        renderBlocklist();
+    });
+    document.getElementById('bl-hdr-name').addEventListener('click', () => {
+        blSort = blSort.col === 'name' ? { col: 'name', dir: -blSort.dir } : { col: 'name', dir: 1 };
+        renderBlocklist();
+    });
+    document.getElementById('bl-hdr-type').addEventListener('click', () => {
+        blSort = blSort.col === 'qtype' ? { col: 'qtype', dir: -blSort.dir } : { col: 'qtype', dir: 1 };
+        renderBlocklist();
+    });
 
     document.getElementById('cache-refresh').addEventListener('click', loadCache);
     document.getElementById('cache-add-btn').addEventListener('click', addCacheEntry);
@@ -357,5 +447,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     startSSE();
-    showTab('status');
+    showTab('log');
 });

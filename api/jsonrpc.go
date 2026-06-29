@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/config"
 )
 
@@ -93,5 +94,14 @@ func (s *ApiService) BlockListDelete(r *http.Request, req *BlockListDeleteReq, r
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+type BlockListListRes struct {
+	Entries []blocklist.BlockEntry `json:"entries"`
+}
+
+func (s *ApiService) BlockListList(r *http.Request, req *Empty, res *BlockListListRes) error {
+	res.Entries = s.config.BlockList.Dump()
 	return nil
 }

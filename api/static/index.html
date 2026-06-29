@@ -26,6 +26,8 @@ nav button.active{color:#111;font-weight:bold;border-bottom-color:#111}
 table{border-collapse:collapse;width:100%}
 th,td{padding:2px 7px;text-align:left;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 th{background:#f6f6f6;border-bottom:2px solid #bbb;font-weight:bold;position:sticky;top:0;z-index:1}
+th.sortable{cursor:pointer}
+th.sortable:hover{background:#ebebeb}
 tr.blocked td{background:#fde8e8}
 tr.cached td{background:#e8f5e8}
 tr.error td{background:#fff3e0}
@@ -42,7 +44,7 @@ select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4p
 .btn-sm{font-family:monospace;font-size:11px;padding:1px 5px;border:1px solid #bbb;background:#fff;cursor:pointer}
 .btn-sm:disabled{opacity:.4;cursor:default}
 .btn-sm.blk{border-color:#c88;color:#c00;background:#fff8f8}
-.btn-sm.blk:hover{background:#fee}
+.btn-sm.blk:hover:not(:disabled){background:#fee}
 
 .row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .msg-ok{color:#060}
@@ -70,22 +72,14 @@ select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4p
 </div>
 
 <nav>
-  <button class="active" data-tab="status">Status</button>
-  <button data-tab="log">Log</button>
+  <button class="active" data-tab="log">Log</button>
   <button data-tab="blocklist">Blocklist</button>
   <button data-tab="cache">Cache</button>
+  <button data-tab="config">Config</button>
 </nav>
 
-<!-- Status -->
-<section id="tab-status" class="tab">
-  <div class="row" style="padding:4px 0;margin-bottom:8px">
-    Blocklist entries: <strong id="status-blcount">—</strong>
-  </div>
-  <pre id="config-pre">loading...</pre>
-</section>
-
 <!-- Log -->
-<section id="tab-log" class="tab" hidden>
+<section id="tab-log" class="tab">
   <div class="row" style="margin-bottom:8px">
     Show <select id="log-visible">
       <option>10</option><option selected>20</option><option>50</option><option>100</option>
@@ -124,31 +118,50 @@ select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4p
 
 <!-- Blocklist -->
 <section id="tab-blocklist" class="tab" hidden>
-  <div class="row" style="padding:4px 0;margin-bottom:8px">
-    Entries: <strong id="bl-count">—</strong>
+  <div class="row" style="margin-bottom:8px">
+    Entries: <strong id="bl-count">--</strong>
     <button class="btn" id="bl-refresh-btn">Refresh</button>
+    &nbsp; Filter: <input type="text" id="bl-filter" style="width:220px" placeholder="regex">
+    <button class="btn" id="bl-filter-clear">clear</button>
   </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:8px;align-items:flex-start">
+    <div>
+      <div style="margin-bottom:3px">Add (one per line, domain or domain:TYPE):</div>
+      <textarea id="bl-add" rows="3" style="width:280px;display:block"></textarea>
+      <button class="btn" id="bl-add-btn" style="margin-top:3px">Add</button>
+    </div>
+    <div style="padding-top:18px">
+      <div class="row">
+        <input type="text" id="bl-del" style="width:220px" placeholder="domain or domain:TYPE">
+        <button class="btn" id="bl-del-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <div id="bl-msg" style="min-height:1.3em;margin-bottom:6px"></div>
 
-  <div style="margin-bottom:14px">
-    <div style="margin-bottom:4px">Add entries (one per line):</div>
-    <textarea id="bl-add" rows="5" style="width:400px;display:block"></textarea>
-    <button class="btn" id="bl-add-btn" style="margin-top:4px">Add</button>
-  </div>
-
-  <div>
-    <div style="margin-bottom:4px">Delete entry:</div>
-    <div class="row">
-      <input type="text" id="bl-del" style="width:300px" placeholder="domain name">
-      <button class="btn" id="bl-del-btn">Delete</button>
-    </div>
+  <div class="tbl-wrap">
+    <table style="table-layout:fixed">
+      <colgroup>
+        <col style="width:82%"><col style="width:9%"><col style="width:9%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th id="bl-hdr-name" class="sortable">Name</th>
+          <th id="bl-hdr-type" class="sortable">Type</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="bl-tbody"></tbody>
+    </table>
   </div>
 </section>
 
 <!-- Cache -->
 <section id="tab-cache" class="tab" hidden>
   <div class="row" style="padding:4px 0;margin-bottom:8px">
-    Entries: <strong id="cache-count">—</strong>
+    Entries: <strong id="cache-count">--</strong>
     <button class="btn" id="cache-refresh">Refresh</button>
   </div>
   <div class="row" style="margin-bottom:10px">
@@ -167,6 +180,11 @@ select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4p
       <tbody id="cache-tbody"></tbody>
     </table>
   </div>
+</section>
+
+<!-- Config -->
+<section id="tab-config" class="tab" hidden>
+  <pre id="config-pre">loading...</pre>
 </section>
 
 <script type="module" src="./app.js"></script>
