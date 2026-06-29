@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Dinosaur DNS</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+body{font-family:monospace;font-size:13px;color:#111;background:#fff;padding:10px 16px}
+
+#top-area{display:grid;grid-template-columns:1fr auto;margin-bottom:10px}
+#top-area img{grid-column:2;grid-row:1/4;align-self:center;padding-left:14px;height:60px;width:auto}
+.hdr{display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:2px solid #111}
+.hdr h1{font-size:14px;font-weight:bold}
+.indicator{display:inline-block;width:9px;height:9px;border-radius:50%;background:#bbb;flex-shrink:0}
+.indicator.on{background:#4a4}
+.indicator.off{background:#c44}
+
+.stats-bar{display:flex;gap:24px;padding:6px 0 8px;border-bottom:1px solid #ddd}
+.stat .lbl{font-size:11px;color:#777;text-transform:uppercase}
+.stat .val{font-size:15px;font-weight:bold}
+
+nav{display:flex;border-bottom:1px solid #ccc;margin-bottom:12px}
+nav button{font-family:monospace;font-size:13px;padding:5px 16px;border:none;border-bottom:3px solid transparent;margin-bottom:-1px;background:none;cursor:pointer;color:#555}
+nav button:hover{background:#f5f5f5;color:#111}
+nav button.active{color:#111;font-weight:bold;border-bottom-color:#111}
+
+table{border-collapse:collapse;width:100%}
+th,td{padding:2px 7px;text-align:left;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+th{background:#f6f6f6;border-bottom:2px solid #bbb;font-weight:bold;position:sticky;top:0;z-index:1}
+th.sortable{cursor:pointer}
+th.sortable:hover{background:#ebebeb}
+tr.blocked td{background:#fde8e8}
+tr.cached td{background:#e8f5e8}
+tr.error td{background:#fff3e0}
+.tbl-wrap{overflow-y:auto;border:1px solid #ddd;max-height:60vh}
+#log-tbl-wrap{max-height:none;overflow:visible}
+
+input[type=text]{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 5px;outline:none}
+input[type=text]:focus{border-color:#777}
+textarea{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:4px 5px;resize:vertical;outline:none}
+textarea:focus{border-color:#777}
+select{font-family:monospace;font-size:12px;border:1px solid #bbb;padding:2px 4px}
+.btn{font-family:monospace;font-size:12px;padding:3px 10px;border:1px solid #999;background:#f5f5f5;cursor:pointer;color:#111}
+.btn:hover{background:#e8e8e8}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-sm{font-family:monospace;font-size:11px;padding:1px 5px;border:1px solid #bbb;background:#fff;cursor:pointer}
+.btn-sm:disabled{opacity:.4;cursor:default}
+.btn-sm.blk{border-color:#c88;color:#c00;background:#fff8f8}
+.btn-sm.blk:hover:not(:disabled){background:#fee}
+.btn-sm.ublk{border-color:#88c;color:#00c;background:#f8f8ff}
+.btn-sm.ublk:hover:not(:disabled){background:#eef}
+
+tr .log-btn{opacity:0;transition:opacity 0.1s}
+tr:hover .log-btn{opacity:1}
+
+.row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.msg-ok{color:#060}
+.msg-err{color:#c00}
+
+.flt-input{width:100%;font-size:11px!important;padding:1px 4px!important}
+.flt-cell{padding:2px 3px!important;border-bottom:1px solid #ddd!important;background:#fafafa!important}
+
+pre.code{font-family:monospace;font-size:12px;white-space:pre;overflow:auto;background:#fafafa;border:1px solid #ddd;padding:8px;line-height:1.5}
+#config-pre{max-height:50vh}
+
+.cache-section{margin-bottom:14px}
+.cache-section-hdr{font-weight:bold;margin-bottom:6px}
+
+.changes-row{display:flex;gap:12px;margin-bottom:10px}
+.changes-row>div{flex:1}
+.changes-lbl{color:#555;margin-bottom:3px}
+
+/* API doc tab */
+.api-section{margin-bottom:18px}
+.api-section-hdr{font-size:11px;font-weight:bold;text-transform:uppercase;color:#666;letter-spacing:.06em;border-bottom:1px solid #ddd;padding-bottom:3px;margin-bottom:8px}
+.api-method{margin-bottom:12px;padding-left:10px;border-left:3px solid #ddd}
+.api-method h3{font-size:13px;font-weight:bold;font-family:monospace;margin-bottom:2px}
+.api-method .api-desc{color:#444;margin-bottom:5px;font-size:12px}
+.api-method table{font-size:12px;margin-bottom:0}
+.api-method th,.api-method td{padding:2px 8px;border:1px solid #ddd;white-space:normal}
+.api-method th{background:#f6f6f6;font-weight:bold}
+.api-method code{font-family:monospace;background:#f0f0f0;padding:1px 4px;border-radius:2px;font-size:11px}
+.api-endpoint{font-size:12px;color:#555;margin-bottom:12px;padding:6px 10px;background:#fafafa;border:1px solid #ddd}
+</style>
+</head>
+<body>
+
+<div id="top-area">
+  <div class="hdr">
+    <span id="indicator" class="indicator" title="connecting..."></span>
+    <h1>Dinosaur DNS</h1>
+  </div>
+  <div id="pause-warning" hidden style="background:#fff3cd;border:1px solid #e6a817;padding:5px 12px;margin-top:4px;border-radius:2px;display:flex;align-items:center;gap:12px">
+    <span style="font-weight:bold;color:#7a4f00">&#9888; BLOCKING PAUSED</span>
+    <span style="color:#7a4f00">resumes in <strong id="pause-countdown">--</strong></span>
+    <button class="btn" id="pause-resume-quick" style="margin-left:auto">Resume now</button>
+  </div>
+  <div class="stats-bar">
+    <div class="stat"><div class="lbl">queries</div><div class="val" id="stat-total">0</div></div>
+    <div class="stat"><div class="lbl">blocked</div><div class="val" id="stat-blocked">0</div></div>
+    <div class="stat"><div class="lbl">acl</div><div class="val" id="stat-acl">0</div></div>
+    <div class="stat"><div class="lbl">errors</div><div class="val" id="stat-errors">0</div></div>
+    <div class="stat"><div class="lbl">rate</div><div class="val" id="stat-rate">0/min</div></div>
+  </div>
+  <img src="/static/dinosaur.svg" alt="Dinosaur DNS">
+</div>
+
+<nav>
+  <button class="active" data-tab="log">Log</button>
+  <button data-tab="blocklist">Blocklist</button>
+  <button data-tab="cache">Cache</button>
+  <button data-tab="config">Config</button>
+  <button data-tab="api">API</button>
+</nav>
+
+<!-- Log -->
+<section id="tab-log" class="tab">
+  <div class="row" style="margin-bottom:8px">
+    Show <select id="log-visible">
+      <option>10</option><option selected>20</option><option>50</option><option>100</option>
+    </select>
+    <label><input type="checkbox" id="log-pause"> Pause</label>
+    <button class="btn" id="log-prev">&lt; prev</button>
+    <button class="btn" id="log-next">next &gt;</button>
+    <button class="btn" id="filter-clear">clear filter</button>
+    <span id="log-count" style="color:#888;font-size:11px"></span>
+  </div>
+  <div id="log-tbl-wrap" class="tbl-wrap">
+    <table style="table-layout:fixed">
+      <colgroup>
+        <col style="width:8%"><col style="width:17%"><col style="width:33%">
+        <col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Time</th><th>Client</th><th>Qname</th>
+          <th>Type</th><th>Rcode</th><th>Status</th><th>ms</th>
+        </tr>
+        <tr>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-date" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-client" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-qname" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-qtype" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-rcode" placeholder="filter"></td>
+          <td class="flt-cell"><input class="filter-input flt-input" type="text" id="f-status" placeholder="filter"></td>
+          <td class="flt-cell"></td>
+        </tr>
+      </thead>
+      <tbody id="log-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Blocklist -->
+<section id="tab-blocklist" class="tab" hidden>
+  <div class="row" style="margin-bottom:10px;align-items:center;padding-bottom:8px;border-bottom:1px solid #eee">
+    Pause blocking for
+    <input type="number" id="pause-seconds" value="300" min="1" style="width:65px;text-align:right">
+    seconds
+    <button class="btn" id="pause-btn">Pause</button>
+    <button class="btn" id="resume-btn">Resume</button>
+    <span id="bl-pause-msg" style="color:#888;font-size:11px"></span>
+  </div>
+  <div style="display:flex;gap:16px;margin-bottom:8px;align-items:flex-start">
+    <div>
+      <div style="margin-bottom:3px">Add (one per line, domain or domain:TYPE):</div>
+      <textarea id="bl-add" rows="3" style="width:280px;display:block"></textarea>
+      <button class="btn" id="bl-add-btn" style="margin-top:3px">Add</button>
+    </div>
+    <div style="padding-top:18px">
+      <div class="row">
+        <input type="text" id="bl-del" style="width:220px" placeholder="domain or domain:TYPE">
+        <button class="btn" id="bl-del-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+  <div id="bl-msg" style="min-height:1.3em;margin-bottom:4px"></div>
+  <div class="row" style="margin-bottom:6px">
+    Entries: <strong id="bl-count">--</strong>
+    <button class="btn" id="bl-refresh-btn">Refresh</button>
+    &nbsp; Filter: <input type="text" id="bl-filter" style="width:220px" placeholder="regex">
+    <button class="btn" id="bl-filter-clear">clear</button>
+  </div>
+  <div class="tbl-wrap">
+    <table style="table-layout:fixed">
+      <colgroup>
+        <col style="width:82%"><col style="width:9%"><col style="width:9%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th id="bl-hdr-name" class="sortable">Name</th>
+          <th id="bl-hdr-type" class="sortable">Type</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="bl-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Cache -->
+<section id="tab-cache" class="tab" hidden>
+  <div class="cache-section">
+    <div class="cache-section-hdr row">
+      Local entries: <strong id="cache-perm-count">--</strong>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="cache-add" style="width:440px" placeholder="RR string  e.g.  host.local. 3600 IN A 192.168.1.1">
+      <button class="btn" id="cache-add-btn">Add permanent</button>
+      <button class="btn" id="cache-add-ptr-btn">Add permanent (PTR)</button>
+      <span id="cache-msg"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table style="table-layout:fixed">
+        <colgroup>
+          <col style="width:48%"><col style="width:11%"><col style="width:30%"><col style="width:11%">
+        </colgroup>
+        <thead><tr><th>Name</th><th>Type</th><th>Status</th><th></th></tr></thead>
+        <tbody id="cache-perm-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cache-section">
+    <div class="cache-section-hdr row">
+      Cached entries: <strong id="cache-cached-count">--</strong>
+      <button class="btn" id="cache-refresh">Refresh</button>
+    </div>
+    <div class="tbl-wrap">
+      <table style="table-layout:fixed">
+        <colgroup>
+          <col style="width:48%"><col style="width:11%"><col style="width:30%"><col style="width:11%">
+        </colgroup>
+        <thead><tr><th>Name</th><th>Type</th><th>TTL</th><th></th></tr></thead>
+        <tbody id="cache-cached-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Config -->
+<section id="tab-config" class="tab" hidden>
+  <div style="font-weight:bold;margin-bottom:4px">Server config:</div>
+  <pre id="config-pre" class="code" style="margin-bottom:12px">loading...</pre>
+
+  <div style="font-weight:bold;margin-bottom:6px">Web changes (since server start):</div>
+  <div class="changes-row">
+    <div>
+      <div class="changes-lbl">-block directives:</div>
+      <pre id="changes-blocks" class="code" style="min-height:2.5em">(none)</pre>
+    </div>
+    <div>
+      <div class="changes-lbl">-localrr directives:</div>
+      <pre id="changes-rrs" class="code" style="min-height:2.5em">(none)</pre>
+    </div>
+  </div>
+
+  <div class="row" style="margin-bottom:6px">
+    <button class="btn" id="merge-config-btn">Generate merged config</button>
+    <span id="merge-msg"></span>
+  </div>
+  <pre id="merged-config-pre" class="code" hidden></pre>
+</section>
+
+<!-- API -->
+<section id="tab-api" class="tab" hidden>
+  <div class="api-endpoint">
+    Endpoint: <code>POST /api</code> &nbsp;|&nbsp; Content-Type: <code>application/json</code> &nbsp;|&nbsp;
+    Protocol: JSON-RPC 2.0<br>
+    Request: <code>{"jsonrpc":"2.0","method":"api.Method","params":{...},"id":1}</code><br>
+    Response: <code>{"jsonrpc":"2.0","id":1,"result":{...}}</code>
+  </div>
+
+  <div class="api-section">
+    <div class="api-section-hdr">Configuration</div>
+    <div class="api-method">
+      <h3>api.Config</h3>
+      <div class="api-desc">Return the server startup configuration.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td colspan="3" style="color:#888;font-style:italic">No parameters</td></tr>
+      </tbody></table>
+      <table style="margin-top:4px"><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>listen</code></td><td>string[]</td><td>Listen addresses</td></tr>
+        <tr><td><code>upstream</code></td><td>string[]</td><td>Upstream resolvers</td></tr>
+        <tr><td><code>block</code></td><td>string[]</td><td>Inline block entries</td></tr>
+        <tr><td><code>block-delete</code></td><td>string[]</td><td>Block deletions</td></tr>
+        <tr><td><code>blocklist</code></td><td>string[]</td><td>Blocklist file/URL sources</td></tr>
+        <tr><td><code>localrr</code></td><td>string[]</td><td>Local RR entries</td></tr>
+        <tr><td><code>localrr-ptr</code></td><td>string[]</td><td>Local RR entries with auto-PTR</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="api-section">
+    <div class="api-section-hdr">Cache</div>
+    <div class="api-method">
+      <h3>api.CacheAdd</h3>
+      <div class="api-desc">Add a DNS resource record to the cache.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>rr</code></td><td>string</td><td>Full RR string, e.g. <code>host.local. 3600 IN A 10.0.0.1</code></td></tr>
+        <tr><td><code>permanent</code></td><td>bool</td><td>Persist indefinitely (no TTL expiry)</td></tr>
+        <tr><td><code>ptr</code></td><td>bool</td><td>Also add an auto-generated reverse PTR record</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.CacheDelete</h3>
+      <div class="api-desc">Remove an entry from the cache.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>name</code></td><td>string</td><td>Record name (FQDN)</td></tr>
+        <tr><td><code>qtype</code></td><td>string</td><td>Record type, e.g. <code>A</code>, <code>AAAA</code></td></tr>
+        <tr><td><code>ptr</code></td><td>bool</td><td>Also remove the associated PTR record</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.CacheDebug</h3>
+      <div class="api-desc">List all current cache entries.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td colspan="3" style="color:#888;font-style:italic">No parameters</td></tr>
+      </tbody></table>
+      <table style="margin-top:4px"><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>entries</code></td><td>string[]</td><td>Cache entries as strings: <code>&lt;name type&gt; ttl|permanent</code></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="api-section">
+    <div class="api-section-hdr">Blocklist</div>
+    <div class="api-method">
+      <h3>api.BlockListCount</h3>
+      <div class="api-desc">Return the number of entries in the blocklist.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>count</code></td><td>number</td><td>Total blocked entries</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.BlockListAdd</h3>
+      <div class="api-desc">Add one or more entries to the blocklist.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>entries</code></td><td>string[]</td><td>Domains to block, optionally with type: <code>domain</code> or <code>domain:TYPE</code></td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.BlockListDelete</h3>
+      <div class="api-desc">Remove an entry from the blocklist.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>name</code></td><td>string</td><td>Domain to unblock: <code>domain</code> or <code>domain:TYPE</code></td></tr>
+      </tbody></table>
+      <table style="margin-top:4px"><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>found</code></td><td>bool</td><td>Whether the entry existed and was removed</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.BlockListList</h3>
+      <div class="api-desc">List all blocklist entries.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>entries[].name</code></td><td>string</td><td>Blocked domain (with trailing dot)</td></tr>
+        <tr><td><code>entries[].block</code></td><td>string[]</td><td>Blocked record types, e.g. <code>["ANY"]</code></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="api-section">
+    <div class="api-section-hdr">Block pause</div>
+    <div class="api-method">
+      <h3>api.GetBlockingStatus</h3>
+      <div class="api-desc">Return current blocking pause state.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>paused</code></td><td>bool</td><td>Whether blocking is currently paused</td></tr>
+        <tr><td><code>remaining_seconds</code></td><td>number</td><td>Seconds until blocking resumes (0 if not paused)</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.PauseBlocking</h3>
+      <div class="api-desc">Pause all block rules for a specified duration. Blocking resumes automatically when the timer expires.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>seconds</code></td><td>number</td><td>Duration to pause (minimum 1; defaults to 300 if ≤ 0)</td></tr>
+      </tbody></table>
+      <table style="margin-top:4px"><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>paused</code></td><td>bool</td><td>Always <code>true</code> after a successful call</td></tr>
+        <tr><td><code>remaining_seconds</code></td><td>number</td><td>Seconds remaining</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.ResumeBlocking</h3>
+      <div class="api-desc">Resume blocking immediately, cancelling any active pause.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>paused</code></td><td>bool</td><td>Always <code>false</code> after a successful call</td></tr>
+        <tr><td><code>remaining_seconds</code></td><td>number</td><td>Always <code>0</code></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="api-section">
+    <div class="api-section-hdr">Web changes</div>
+    <div class="api-method">
+      <h3>api.GetChanges</h3>
+      <div class="api-desc">Return the net set of changes made via the web UI since the server started. Add/remove operations on the same entry cancel out.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>blocks</code></td><td>string[]</td><td>Net-added block rules (<code>domain</code> or <code>domain:TYPE</code>)</td></tr>
+        <tr><td><code>block_deletes</code></td><td>string[]</td><td>Net-deleted block rules (were present at startup)</td></tr>
+        <tr><td><code>local_rrs</code></td><td>string[]</td><td>Net-added local RR entries (full RR strings)</td></tr>
+        <tr><td><code>local_rr_ptrs</code></td><td>string[]</td><td>Net-added local RR entries added with auto-PTR</td></tr>
+        <tr><td><code>local_rr_deletes</code></td><td>string[]</td><td>Net-deleted startup local RR entries (as <code>fqdn TYPE</code> keys)</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.GetMergedConfig</h3>
+      <div class="api-desc">Return the startup configuration merged with all web-UI changes as a JSON string, suitable for use as a new config file.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>config</code></td><td>string</td><td>JSON-encoded merged UserConfig</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</section>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

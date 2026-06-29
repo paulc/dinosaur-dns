@@ -57,3 +57,26 @@ func TestBlockListDelete(t *testing.T) {
 		t.Errorf("Invalid count: %d", count_res.Count)
 	}
 }
+
+func TestBlockListList(t *testing.T) {
+
+	api, _ := setupApiService(t)
+	r := &http.Request{}
+
+	add_req := &BlockListAddReq{[]string{"aaaa.com", "bbbb.com:AAAA"}}
+	add_res := &Empty{}
+	if err := api.BlockListAdd(r, add_req, add_res); err != nil {
+		t.Fatal(err)
+	}
+
+	list_req := &Empty{}
+	list_res := &BlockListListRes{}
+
+	if err := api.BlockListList(r, list_req, list_res); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(list_res.Entries) != 2 {
+		t.Errorf("Expected 2 entries, got %d: %+v", len(list_res.Entries), list_res.Entries)
+	}
+}

@@ -46,25 +46,45 @@ export class Buffer {
     }
   }
 
-  filter(n,f,p) {
+  // Returns up to n items (newest first) that pass f, starting after skipping
+  // the first offset matching items from anchor position p.
+  filter(n, f, p, offset=0) {
     f = f ?? ((i) => true)
     p = p ?? this.pointer
     const avail = this.calculateAvailable(p)
-    const count = Math.min(n,avail)
     const out = []
+    let skipped = 0
     let i = 1
-    while ((out.length < count) && (i <= avail)) {
+    while ((out.length < n) && (i <= avail)) {
       let pos = p - i
       if (pos < 0) {
         pos = this.length + pos
       }
       let item = this.buffer[pos]
-      if (f(item)) { 
-        out.push(item)
+      if (f(item)) {
+        if (skipped < offset) {
+          skipped++
+        } else {
+          out.push(item)
+        }
       }
       i++
     }
     return out
+  }
+
+  // Count all items that pass f from anchor position p.
+  countFiltered(f, p) {
+    f = f ?? ((i) => true)
+    p = p ?? this.pointer
+    const avail = this.calculateAvailable(p)
+    let count = 0
+    for (let i = 1; i <= avail; i++) {
+      let pos = p - i
+      if (pos < 0) pos = this.length + pos
+      if (f(this.buffer[pos])) count++
+    }
+    return count
   }
 
   wrapPos(pos) {

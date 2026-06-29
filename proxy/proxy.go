@@ -160,11 +160,13 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		logItem.Acl = true
 
-		// Check blocklist — read pointer under lock; refresh goroutine replaces it under the same lock
+		// Check blocklist — read pointer and pause state under lock
 		config.RLock()
 		bl := config.BlockList
+		pauseUntil := config.BlockPauseUntil
 		config.RUnlock()
-		if bl.Match(qname, qtype) {
+		blockingPaused := !pauseUntil.IsZero() && time.Now().Before(pauseUntil)
+		if !blockingPaused && bl.Match(qname, qtype) {
 			log.Debugf("Connection: %s/%s <%s %s> [blocked]", clientHost, clientNet, qname, dns.TypeToString[qtype])
 			w.WriteMsg(dnsErrorResponse(q, dns.RcodeNameError, errors.New("Blocked")))
 			logItem.Blocked = true
@@ -180,9 +182,8 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 			return
 		}
 
-		// If we get an empty answer for an AAAA request and DNS64 is configured try to generate DNS64 response
-		// (only for queries from IPv6 address)
-		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 && clientIP.To4() == nil {
+		// If we get an empty answer for a AAAA request and DNS64 is configured, synthesise from A records
+		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 {
 			// Try DNS64 lookup — use a copy so the original q (TypeAAAA) is preserved for error responses
 			q4 := q.Copy()
 			q4.Question[0].Qtype = dns.TypeA
@@ -203,7 +204,8 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 					if ip4 != nil {
 						r := new(dns.AAAA)
 						r.Hdr = dns.RR_Header{Name: v.Header().Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: v.Header().Ttl}
-						r.AAAA = config.Dns64Prefix.IP
+						r.AAAA = make(net.IP, 16)
+						copy(r.AAAA, config.Dns64Prefix.IP)
 						r.AAAA[12] = ip4[0]
 						r.AAAA[13] = ip4[1]
 						r.AAAA[14] = ip4[2]

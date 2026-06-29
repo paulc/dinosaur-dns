@@ -67,11 +67,34 @@ qtype. Supports ANY-type entries (match all qtypes) and specific-type entries
 list.
 
 **api** -- optional HTTP server (default `127.0.0.1:8553`) with:
+- `GET /` -- redirect to dashboard
 - `GET /ping` -- health check
 - `POST /api` -- JSON-RPC 2.0 endpoint (gorilla/rpc): Config, CacheAdd,
-  CacheDelete, CacheDebug, BlockListCount, BlockListAdd, BlockListDelete
+  CacheDelete, CacheDebug, BlockListCount, BlockListAdd, BlockListDelete,
+  BlockListList, GetBlockingStatus, PauseBlocking, ResumeBlocking,
+  GetChanges, GetMergedConfig
 - `GET /log` -- SSE stream of recent query log entries
-- `GET /static/*` -- embedded web dashboard (Alpine.js, Dygraph)
+- `GET /static/*` -- embedded web dashboard (plain JS, no external dependencies)
+
+`changelog.go` -- `changeLog` struct tracks the net set of web-UI mutations
+since server start: block additions (`blocks`), block deletions of startup
+entries (`blockDeletes`), local RR additions (`localRRs`, `localRRPtrs`),
+and local RR deletions of startup entries (`localRRDeletes`). Add/remove
+operations on the same entry cancel out. Keys are normalised via
+`normalizeBlockEntry` so `example.com:A` and `example.com:AAAA` are distinct.
+`GetMergedConfig` produces a JSON `UserConfig` combining startup config with
+all accumulated changes, suitable for use as a new config file.
+
+`ProxyConfig.BlockPauseUntil` (`time.Time`) stores the resume time for a
+timed blocking pause. The proxy reads it under `RLock` alongside the
+`BlockList` pointer; a zero value means not paused.
+
+The web dashboard (served from embedded `api/static/`) has five tabs: Log
+(SSE query log with block/unblock buttons, filters, and pagination), Blocklist
+(sortable/filterable list with add/delete forms and timed pause control),
+Cache (split into permanent local entries and upstream-cached entries),
+Config (server config, web-UI change summary, generate merged config), and
+API (JSON-RPC reference documentation).
 
 Can bind to a TCP address or a UNIX domain socket. When using a socket,
 a signal handler removes the socket file before re-raising the signal so
@@ -92,14 +115,15 @@ an SSE hook for the `/log` endpoint.
 1. `dns.Server` (miekg) calls `MakeHandler` for each incoming query.
 2. ACL check -- drop if client IP not in any permitted CIDR (default: allow
    all).
-3. Blocklist check -- return NXDOMAIN if domain/qtype matched.
+3. Blocklist check -- return NXDOMAIN if domain/qtype matched (skipped while
+   `BlockPauseUntil` is in the future).
 4. Cache lookup -- return cached response with decremented TTLs if hit.
 5. Upstream resolution -- iterate resolver list in order; on success reset
    error counter and cache response; on first-resolver failure increment
    counter and demote after 3 consecutive errors.
-6. DNS64 (if enabled) -- if AAAA query returned no answers and client is
-   IPv6-only, re-resolve as A and synthesise AAAA records using the
-   configured prefix (default `64:ff9b::/96`).
+6. DNS64 (if enabled) -- if AAAA query returned no answers, re-resolve as A
+   and synthesise AAAA records using the configured prefix (default
+   `64:ff9b::/96`). Applies to all clients regardless of address family.
 7. Write response.
 
 ## Configuration precedence

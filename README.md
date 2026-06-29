@@ -122,7 +122,7 @@ With no `-acl` flags all clients are permitted.
 
 ## DNS64
 
-Synthesise AAAA records for IPv6-only clients using the well-known prefix:
+Synthesise AAAA records when no upstream AAAA answer exists, using the well-known prefix (applies to all clients):
 
 ```
 ./dinosaur -dns64
@@ -173,14 +173,34 @@ Endpoints:
 
 | Path | Description |
 |------|-------------|
+| `GET /` | redirect to dashboard |
 | `GET /ping` | returns `PONG` |
 | `POST /api` | JSON-RPC 2.0 (see below) |
 | `GET /log` | SSE stream of query log |
 | `GET /static/` | web dashboard |
 
-JSON-RPC methods: `api.Config`, `api.CacheAdd`, `api.CacheDelete`,
-`api.CacheDebug`, `api.BlockListCount`, `api.BlockListAdd`,
-`api.BlockListDelete`.
+JSON-RPC methods:
+
+| Method | Description |
+|--------|-------------|
+| `api.Config` | Return startup configuration |
+| `api.CacheAdd` | Add a DNS record to the cache |
+| `api.CacheDelete` | Remove a record from the cache |
+| `api.CacheDebug` | List all cache entries |
+| `api.BlockListCount` | Number of blocked entries |
+| `api.BlockListAdd` | Add one or more block rules |
+| `api.BlockListDelete` | Remove a block rule |
+| `api.BlockListList` | List all block rules |
+| `api.GetBlockingStatus` | Check whether blocking is paused |
+| `api.PauseBlocking` | Pause all block rules for N seconds |
+| `api.ResumeBlocking` | Resume blocking immediately |
+| `api.GetChanges` | Net web-UI changes since server start |
+| `api.GetMergedConfig` | Startup config merged with web-UI changes |
+
+The web dashboard (served at `/static/index.html`) provides a query log,
+blocklist management (including a timed pause), cache inspection, config
+viewer with change tracking, and API reference. Full JSON-RPC documentation
+is available on the API tab of the dashboard.
 
 ## Logging
 
