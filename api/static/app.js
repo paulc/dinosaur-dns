@@ -256,6 +256,7 @@ function renderBlocklist() {
                 const idx = blEntries.findIndex(e => e.name === row.name && e.qtype === row.qtype);
                 if (idx !== -1) blEntries.splice(idx, 1);
                 renderBlocklist();
+                scheduleLogRender();
             } catch (e) {
                 btn.disabled = false;
             }
@@ -298,6 +299,7 @@ async function deleteBlocklistEntry() {
         showMsg(msg, result.found ? `Deleted: ${name}` : `Not found: ${name}`, !result.found);
         if (result.found) {
             blockedDomains.delete(name.split(':')[0]);
+            scheduleLogRender();
             await loadBlocklist();
         }
     } catch (e) {
