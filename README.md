@@ -322,6 +322,14 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Enable DNS64 (default: false)
   -dns64-prefix string
         DNS64 prefix (default: 64:ff9b::/96)
+  -doh value
+        DoH listen address/interface (enables DoH server, default port 443)
+  -doh-cert string
+        DoH TLS certificate file (auto-generates self-signed if omitted)
+  -doh-key string
+        DoH TLS private key file
+  -doh-path string
+        DoH request path (default: /dns-query)
   -help
         Show usage
   -listen value
