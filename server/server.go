@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"strings"
 	"time"
 
@@ -10,83 +11,128 @@ import (
 	"github.com/paulc/dinosaur-dns/api"
 	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/config"
-	"github.com/paulc/dinosaur-dns/doh"
+	"github.com/paulc/dinosaur-dns/dhcp"
 	"github.com/paulc/dinosaur-dns/proxy"
+	"golang.org/x/sys/unix"
 )
+
+// boundDNS holds pre-bound DNS listeners for one listen address.
+type boundDNS struct {
+	udp  *dns.Server
+	tcp  *dns.Server
+	addr string
+}
 
 func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready chan bool) {
 
-	// We have now setup Logger so use this
 	log := proxy_config.Log
 
 	json_config, _ := json.MarshalIndent(proxy_config.UserConfig, "", "  ")
 	log.Debugf("%s\n", string(json_config))
 
-	// Register handler before starting listeners so no query can arrive with an empty mux
+	// Register DNS handler before binding so no query arrives with an empty mux.
 	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
 
-	// Start listeners
+	// ── Phase 1: bind all sockets (may require root) ─────────────────────────
+
+	// DNS listeners.
+	var dnsServers []boundDNS
 	for _, listenAddr := range proxy_config.ListenAddr {
-
-		net_udp, net_tcp := "udp", "tcp"
-
-		// Avoid global addresses listening on IPv4 & IPv6
+		udpNet, tcpNet := "udp", "tcp"
 		if isV4Global(listenAddr) {
-			net_udp, net_tcp = "udp4", "tcp4"
+			udpNet, tcpNet = "udp4", "tcp4"
 		}
 		if isV6Global(listenAddr) {
-			net_udp, net_tcp = "udp6", "tcp6"
+			udpNet, tcpNet = "udp6", "tcp6"
 		}
 
-		// Start UDP server
-		server_udp := &dns.Server{
-			Addr: listenAddr,
-			Net:  net_udp,
-			// Accept large UDP messages (we pass through EDNS0
-			// messages to the upstream resolver - this just ensures
-			// that we can handle these)
-			UDPSize: 4096,
+		udpConn, err := net.ListenPacket(udpNet, listenAddr)
+		if err != nil {
+			log.Fatal(listenAddr, " UDP: ", err)
+		}
+		tcpListener, err := net.Listen(tcpNet, listenAddr)
+		if err != nil {
+			log.Fatal(listenAddr, " TCP: ", err)
 		}
 
+		dnsServers = append(dnsServers, boundDNS{
+			udp: &dns.Server{
+				PacketConn: udpConn,
+				Net:        udpNet,
+				UDPSize:    4096,
+			},
+			tcp: &dns.Server{
+				Listener: tcpListener,
+				Net:      tcpNet,
+			},
+			addr: listenAddr,
+		})
+	}
+
+	// API listener (bind now; serve after privilege drop).
+	var apiListener net.Listener
+	if proxy_config.Api {
+		var err error
+		apiListener, err = api.BindListener(proxy_config.ApiBind, log)
+		if err != nil {
+			log.Fatalf("API listener could not bind [%s]: %s", proxy_config.ApiBind, err)
+		}
+	}
+
+	// DHCP servers (port 67, requires root).
+	var dhcpServers []*dhcp.Server
+	if len(proxy_config.DhcpConfigs) > 0 {
+		var err error
+		dhcpServers, err = dhcp.BindAll(proxy_config)
+		if err != nil {
+			log.Fatal("DHCP: ", err)
+		}
+	}
+
+	// ── Phase 2: drop privileges ──────────────────────────────────────────────
+	// All sockets are bound; no goroutines are running yet, so setuid is safe.
+	if proxy_config.Setuid {
+		if err := unix.Setgid(proxy_config.SetuidGid); err != nil {
+			log.Fatal("setgid: ", err)
+		}
+		if err := unix.Setuid(proxy_config.SetuidUid); err != nil {
+			log.Fatal("setuid: ", err)
+		}
+		log.Printf("Dropped privileges: uid=%d gid=%d", proxy_config.SetuidUid, proxy_config.SetuidGid)
+	}
+
+	// ── Phase 3: start goroutines (no privileged operations from here) ────────
+
+	// DNS servers.
+	for _, s := range dnsServers {
+		srv := s
 		go func() {
-			if err := server_udp.ListenAndServe(); err != nil {
-				log.Fatal(listenAddr, ": ", err)
+			if err := srv.udp.ActivateAndServe(); err != nil {
+				log.Fatal(srv.addr, " UDP: ", err)
 			}
 		}()
-
-		// Start TCP server
-		server_tcp := &dns.Server{
-			Addr: listenAddr,
-			Net:  net_tcp,
-		}
-
 		go func() {
-			if err := server_tcp.ListenAndServe(); err != nil {
-				log.Fatal(listenAddr, ": ", err)
+			if err := srv.tcp.ActivateAndServe(); err != nil {
+				log.Fatal(srv.addr, " TCP: ", err)
 			}
 		}()
 	}
 
-	/*
+	// API server.
+	if proxy_config.Api {
+		go api.ServeWithListener(apiListener, proxy_config)
+	}
 
-		// XXX panics ???
+	// DHCP servers.
+	for _, s := range dhcpServers {
+		srv := s
+		go srv.Serve()
+	}
+	if len(dhcpServers) > 0 {
+		dhcp.StartReaper()
+	}
 
-		// Wait for listeners to bind
-		time.Sleep(1 * time.Second)
-
-		// Change user/group
-		if proxy_config.Setuid {
-			if err := unix.Setgid(proxy_config.SetuidGid); err != nil {
-				log.Fatal("sidgid:", err)
-			}
-			if err := unix.Setuid(proxy_config.SetuidUid); err != nil {
-				log.Fatal("setuid", err)
-			}
-		}
-
-	*/
-
-	// Start flush cache goroutine
+	// Cache flush goroutine.
 	go func() {
 		for {
 			time.Sleep(proxy_config.CacheFlush)
@@ -95,7 +141,7 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		}
 	}()
 
-	// Start blocklist update goroutine if enabled
+	// Blocklist refresh goroutine.
 	if proxy_config.Refresh {
 		go func() {
 			for {
@@ -113,35 +159,23 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		}()
 	}
 
-	// Start API
-	if proxy_config.Api {
-		go api.MakeApiHandler(proxy_config)()
-	}
-
-	// Start DoH server
-	if len(proxy_config.DohBind) > 0 {
-		go doh.StartDoH(proxy_config)
-	}
-
 	upstream := make([]string, len(proxy_config.Upstream))
 	for i, v := range proxy_config.Upstream {
 		upstream[i] = v.String()
 	}
 
-	log.Printf("Started server: %s", strings.Join(proxy_config.ListenAddr, " "))
+	log.Printf("Started DNS server: %s", strings.Join(proxy_config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(upstream, " "))
 	log.Printf("Blocklist: %d entries", proxy_config.BlockList.Count())
 	log.Printf("ACL: %s", strings.Join(AclToString(proxy_config.Acl), " "))
 
-	// Make sure servers are listening
+	// Signal readiness.
 	time.Sleep(100 * time.Millisecond)
 	ready <- true
 
-	// Wait
 	select {
 	case <-ctx.Done():
 		log.Print("Shutting down")
 		return
 	}
-
 }

@@ -2,16 +2,18 @@
 
 ## Overview
 
-Dinosaur is a DNS caching proxy. It accepts DNS queries over UDP or TCP,
-resolves them via configurable upstream resolvers, caches responses, and
-applies blocklist and ACL rules before returning answers to clients.
+Dinosaur is a DNS caching proxy and DHCPv4 server. It accepts DNS queries
+over UDP or TCP, resolves them via configurable upstream resolvers, caches
+responses, and applies blocklist and ACL rules. The integrated DHCP server
+leases addresses to local clients and registers their hostnames directly in
+the DNS cache.
 
 ```
 client (UDP/TCP)
       |
       v
-  server/            -- binds listeners, starts goroutines
-      |
+  server/            -- bind-early/drop-late: all sockets bound before
+      |                 setuid, goroutines start after privilege drop
       v
   proxy/             -- handler: ACL check, blocklist check, cache lookup,
       |                 upstream resolution, DNS64 synthesis
@@ -27,6 +29,9 @@ client (UDP/TCP)
       |
       v
   doh/               -- optional DoH server for downstream clients (RFC 8484)
+      |
+      v
+  dhcp/              -- optional integrated DHCPv4 server (RFC 2131)
 ```
 
 ## Packages
@@ -38,9 +43,12 @@ client (UDP/TCP)
 state). `GetProxyConfig` translates user config into live objects: resolver
 instances, parsed CIDRs, populated cache, etc.
 
-**server** -- binds UDP and TCP listeners using `github.com/miekg/dns`,
-starts the cache-flush goroutine, blocklist-refresh goroutine, and optional
-API goroutine, then blocks on a context for graceful shutdown.
+**server** -- implements the bind-early/drop-late privilege pattern. Phase 1
+binds all sockets (DNS UDP+TCP, API listener, DHCP port 67). Phase 2 calls
+`setuid`/`setgid` (if configured) while no goroutines are running. Phase 3
+starts all goroutines. This avoids the race where `syscall.Setuid` is unsafe
+in a multi-threaded process. Also starts the cache-flush goroutine,
+blocklist-refresh goroutine, and DHCP reaper.
 
 **proxy** -- `MakeHandler` returns the `dns.HandlerFunc` registered with the
 miekg mux. For each query: check ACL, check blocklist, consult cache, call
@@ -75,9 +83,14 @@ list.
 - `POST /api` -- JSON-RPC 2.0 endpoint (gorilla/rpc): Config, CacheAdd,
   CacheDelete, CacheDebug, BlockListCount, BlockListAdd, BlockListDelete,
   BlockListList, GetBlockingStatus, PauseBlocking, ResumeBlocking,
-  GetChanges, GetMergedConfig
+  GetChanges, GetMergedConfig, DhcpLeases, DhcpLeaseDelete, DhcpLeaseAdd
 - `GET /log` -- SSE stream of recent query log entries
+- `GET /dhcp-log` -- SSE stream of DHCP events (separate ring buffer, 1000 entries)
 - `GET /static/*` -- embedded web dashboard (plain JS, no external dependencies)
+
+`BindListener` and `ServeWithListener` are exported to allow the bind-early
+pattern: the listener is created in phase 1 (before setuid), the HTTP server
+starts in phase 3.
 
 `changelog.go` -- `changeLog` struct tracks the net set of web-UI mutations
 since server start: block additions (`blocks`), block deletions of startup
@@ -92,12 +105,13 @@ all accumulated changes, suitable for use as a new config file.
 timed blocking pause. The proxy reads it under `RLock` alongside the
 `BlockList` pointer; a zero value means not paused.
 
-The web dashboard (served from embedded `api/static/`) has five tabs: Log
+The web dashboard (served from embedded `api/static/`) has six tabs: Log
 (SSE query log with block/unblock buttons, filters, and pagination), Blocklist
 (sortable/filterable list with add/delete forms and timed pause control),
-Cache (split into permanent local entries and upstream-cached entries),
-Config (server config, web-UI change summary, generate merged config), and
-API (JSON-RPC reference documentation).
+Cache (split into permanent local entries and upstream-cached entries), DHCP
+(lease table grouped/sorted by interface with admin operations, plus live
+DHCP event log), Config (server config, web-UI change summary, generate merged
+config), and API (JSON-RPC reference documentation).
 
 Can bind to a TCP address or a UNIX domain socket. When using a socket,
 a signal handler removes the socket file before re-raising the signal so
@@ -129,8 +143,38 @@ that can be specified multiple times), test helpers.
 **logger** -- thin wrapper around `log.Logger` with Debug/Info/Error/Fatal
 levels and Stderr, Syslog, and Discard backends.
 
+**dhcp** -- optional integrated DHCPv4 server (RFC 2131). One `Server` per
+configured subnet; each binds port 67 via `server4.NewServer` (which binds on
+construction, enabling bind-early). `Serve()` runs the event loop in a goroutine
+after privilege drop.
+
+`leaseDB` manages lease state for one subnet: dynamic pool (sorted `[]net.IP`
+slice), `byClientID` and `byIP` maps, and fixed entries. Client identity is
+DHCP option 61 (client-id hex) if present, falling back to MAC string. DNS A
+records are added to the shared `cache.DNSCache` on OFFER confirmation (`confirm`)
+and removed on release/expiry.
+
+`probeConflict` (`arp.go`) sends an RFC 5227 ARP probe (sender IP = 0.0.0.0,
+using `mdlayher/arp`). Returns `(false, nil)` if raw socket is unavailable so
+DHCP works without full root privileges.
+
+Message handling:
+- DISCOVER → OFFER (allocate tentative lease, ARP probe, send OFFER)
+- REQUEST (SELECTING) → confirm + ACK/NAK
+- REQUEST (RENEWING/REBINDING/INIT-REBOOT) → renew + ACK/NAK
+- RELEASE → expire lease + remove DNS entry
+- INFORM → ACK with network options, no lease time
+- DECLINE → mark IP as declined (30 min cooldown)
+
+Package-level globals (`globalServers`, `globalLogger`) allow `api` to call
+`dhcp.AllLeases()` / `dhcp.DeleteLease()` / `dhcp.AddStaticLease()` and
+`dhcp.MakeSSEHandler()` without circular imports. `StartReaper` runs a
+background goroutine every 30 s to expire stale leases. Leases are persisted
+to a JSON file via atomic write (temp file + rename).
+
 **statshandler** -- fixed-size ring buffer of `ConnectionLog` entries with
-an SSE hook for the `/log` endpoint.
+an SSE hook for the `/log` endpoint. Also used by `dhcp.Logger` for the
+separate `/dhcp-log` SSE stream.
 
 ## Data flow
 

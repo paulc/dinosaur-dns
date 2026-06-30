@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 
@@ -65,6 +66,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 
 	var dohFlag util.MultiFlag
 	flag.Var(&dohFlag, "doh", "DoH listen address/interface (enables DoH server, default port 443)")
+
+	var dhcpFlag util.MultiFlag
+	flag.Var(&dhcpFlag, "dhcp", "DHCP subnet config as JSON object (multiple allowed)")
 
 	flag.Parse()
 
@@ -173,6 +177,15 @@ func GetUserConfig() (*config.UserConfig, error) {
 	}
 	if *dohPathFlag != "" {
 		user_config.DohPath = *dohPathFlag
+	}
+
+	// DHCP servers
+	for _, v := range dhcpFlag {
+		var cfg config.DhcpSubnetConfig
+		if err := json.Unmarshal([]byte(v), &cfg); err != nil {
+			return nil, fmt.Errorf("--dhcp: %w", err)
+		}
+		user_config.Dhcp = append(user_config.Dhcp, cfg)
 	}
 
 	// Blocklist refresh

@@ -111,6 +111,7 @@ pre.code{font-family:monospace;font-size:12px;white-space:pre;overflow:auto;back
   <button class="active" data-tab="log">Log</button>
   <button data-tab="blocklist">Blocklist</button>
   <button data-tab="cache">Cache</button>
+  <button data-tab="dhcp">DHCP</button>
   <button data-tab="config">Config</button>
   <button data-tab="api">API</button>
 </nav>
@@ -235,6 +236,70 @@ pre.code{font-family:monospace;font-size:12px;white-space:pre;overflow:auto;back
         </colgroup>
         <thead><tr><th>Name</th><th>Type</th><th>TTL</th><th></th></tr></thead>
         <tbody id="cache-cached-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- DHCP -->
+<section id="tab-dhcp" class="tab" hidden>
+  <div class="cache-section">
+    <div class="cache-section-hdr row">
+      Leases <strong id="dhcp-lease-count">--</strong>
+      <button class="btn" id="dhcp-refresh-btn">Refresh</button>
+      &nbsp; Group by: <select id="dhcp-group">
+        <option value="interface">Interface</option>
+        <option value="none">None</option>
+      </select>
+      &nbsp; Sort: <select id="dhcp-sort">
+        <option value="ip">IP</option>
+        <option value="hostname">Hostname</option>
+        <option value="mac">MAC</option>
+        <option value="expires">Expires</option>
+      </select>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="dhcp-add-mac" style="width:140px" placeholder="MAC">
+      <input type="text" id="dhcp-add-ip" style="width:110px" placeholder="IP">
+      <input type="text" id="dhcp-add-host" style="width:140px" placeholder="Hostname">
+      <button class="btn" id="dhcp-add-btn">Add static lease</button>
+      <span id="dhcp-msg" style="min-width:120px"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table style="table-layout:fixed">
+        <colgroup>
+          <col style="width:16%"><col style="width:13%"><col style="width:16%"><col style="width:18%"><col style="width:8%"><col style="width:21%"><col style="width:8%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Interface</th><th>IP</th><th>MAC</th><th>Hostname</th>
+            <th>Fixed</th><th>Expires</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="dhcp-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cache-section" style="margin-top:16px">
+    <div class="cache-section-hdr row">
+      DHCP Log
+      <label><input type="checkbox" id="dhcp-log-pause"> Pause</label>
+      <button class="btn" id="dhcp-log-clear">Clear</button>
+    </div>
+    <div class="tbl-wrap">
+      <table style="table-layout:fixed">
+        <colgroup>
+          <col style="width:10%"><col style="width:10%"><col style="width:13%"><col style="width:11%">
+          <col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:23%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Time</th><th>Interface</th><th>MAC</th><th>ClientID</th>
+            <th>IP</th><th>Hostname</th><th>Type</th><th>Result/Error</th>
+          </tr>
+        </thead>
+        <tbody id="dhcp-log-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -390,6 +455,46 @@ pre.code{font-family:monospace;font-size:12px;white-space:pre;overflow:auto;back
         <tr><td><code>remaining_seconds</code></td><td>number</td><td>Always <code>0</code></td></tr>
       </tbody></table>
     </div>
+  </div>
+
+  <div class="api-section">
+    <div class="api-section-hdr">DHCP Leases</div>
+    <div class="api-method">
+      <h3>api.DhcpLeases</h3>
+      <div class="api-desc">List all active DHCP leases across all subnets.</div>
+      <table><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>leases[].client_id</code></td><td>string</td><td>Hex client-id or MAC string</td></tr>
+        <tr><td><code>leases[].mac</code></td><td>string</td><td>MAC address</td></tr>
+        <tr><td><code>leases[].ip</code></td><td>string</td><td>Leased IP address</td></tr>
+        <tr><td><code>leases[].hostname</code></td><td>string</td><td>Client hostname (if provided)</td></tr>
+        <tr><td><code>leases[].domain</code></td><td>string</td><td>Domain name</td></tr>
+        <tr><td><code>leases[].expires</code></td><td>string</td><td>Expiry timestamp (RFC 3339)</td></tr>
+        <tr><td><code>leases[].is_fixed</code></td><td>bool</td><td>Whether this is a fixed/static entry</td></tr>
+        <tr><td><code>leases[].interface</code></td><td>string</td><td>Network interface</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.DhcpLeaseDelete</h3>
+      <div class="api-desc">Remove a dynamic lease by IP address. Does not delete fixed entries.</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>ip</code></td><td>string</td><td>IP address to release</td></tr>
+      </tbody></table>
+      <table style="margin-top:4px"><thead><tr><th>Result field</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>found</code></td><td>bool</td><td>Whether the lease was found and deleted</td></tr>
+      </tbody></table>
+    </div>
+    <div class="api-method">
+      <h3>api.DhcpLeaseAdd</h3>
+      <div class="api-desc">Add a static lease immediately (admin operation).</div>
+      <table><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+        <tr><td><code>mac</code></td><td>string</td><td>Client MAC address</td></tr>
+        <tr><td><code>ip</code></td><td>string</td><td>IP address to assign</td></tr>
+        <tr><td><code>hostname</code></td><td>string</td><td>Hostname for DNS registration</td></tr>
+      </tbody></table>
+    </div>
+    <p style="font-size:12px;color:#555;margin-top:6px">
+      SSE log stream: <code>GET /dhcp-log</code> — streams JSON DHCP events as <code>text/event-stream</code>.
+    </p>
   </div>
 
   <div class="api-section">

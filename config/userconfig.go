@@ -32,10 +32,11 @@ type UserConfig struct {
 	Dns64Prefix        string   `json:"dns64-prefix"`
 	Api                bool     `json:"api"`
 	ApiBind            string   `json:"api-bind"`
-	Doh                []string `json:"doh"`
-	DohCert            string   `json:"doh-cert"`
-	DohKey             string   `json:"doh-key"`
-	DohPath            string   `json:"doh-path"`
+	Doh                []string          `json:"doh"`
+	DohCert            string            `json:"doh-cert"`
+	DohKey             string            `json:"doh-key"`
+	DohPath            string            `json:"doh-path"`
+	Dhcp               []DhcpSubnetConfig `json:"dhcp"`
 	Refresh            bool     `json:"refresh"`
 	RefreshInterval    string   `json:"refresh-interval"`
 	Debug              bool     `json:"debug"`
@@ -169,6 +170,9 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	if user_config.DohPath != "" {
 		config.DohPath = user_config.DohPath
 	}
+
+	// DHCP servers
+	config.DhcpConfigs = append(config.DhcpConfigs, user_config.Dhcp...)
 
 	// Refresh Blocklist
 	config.Refresh = user_config.Refresh

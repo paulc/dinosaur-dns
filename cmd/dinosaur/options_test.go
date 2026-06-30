@@ -36,6 +36,7 @@ func TestGetUserConfig(t *testing.T) {
 		"-doh-path", "/dns",
 		"-refresh",
 		"-refresh-interval", "60m",
+		"-dhcp", `{"interface":"eth0","subnet":"192.168.1.0","subnet-mask":"255.255.255.0","range-start":"192.168.1.100","range-end":"192.168.1.200"}`,
 		"-debug",
 		"-syslog",
 		"-discard",
@@ -67,6 +68,9 @@ func TestGetUserConfig(t *testing.T) {
 		user_config.DohPath != "/dns" ||
 		!user_config.Refresh ||
 		user_config.RefreshInterval != "60m" ||
+		len(user_config.Dhcp) != 1 ||
+		user_config.Dhcp[0].Interface != "eth0" ||
+		user_config.Dhcp[0].Subnet != "192.168.1.0" ||
 		!user_config.Debug ||
 		!user_config.Syslog ||
 		!user_config.Discard {

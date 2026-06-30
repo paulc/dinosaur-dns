@@ -117,6 +117,7 @@ function showTab(id) {
     if (id === 'config')    { loadConfig(); loadChanges(); }
     if (id === 'blocklist') loadBlocklist();
     if (id === 'cache')     loadCache();
+    if (id === 'dhcp')      loadDhcpLeases();
     if (id === 'log')       scheduleLogRender();
 }
 
@@ -499,6 +500,140 @@ async function addCacheEntry(withPtr) {
     }
 }
 
+// --- DHCP tab ---
+
+let dhcpLeases = [];
+let dhcpLogPaused = false;
+const MAX_DHCP_LOG = 200;
+let dhcpLogRows = [];
+
+async function loadDhcpLeases() {
+    const msg = document.getElementById('dhcp-msg');
+    try {
+        const result = await rpcCall('api.DhcpLeases', {});
+        dhcpLeases = result.leases ?? [];
+        renderDhcpLeases();
+    } catch (e) {
+        showMsg(msg, 'Error: ' + e.message, true);
+    }
+}
+
+function renderDhcpLeases() {
+    const group = document.getElementById('dhcp-group').value;
+    const sort  = document.getElementById('dhcp-sort').value;
+    const tbody = document.getElementById('dhcp-tbody');
+    tbody.innerHTML = '';
+    setText('dhcp-lease-count', dhcpLeases.length);
+
+    const sorted = [...dhcpLeases].sort((a, b) => {
+        if (sort === 'ip') {
+            const pa = a.ip.split('.').map(Number);
+            const pb = b.ip.split('.').map(Number);
+            for (let i = 0; i < 4; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
+            return 0;
+        }
+        return (a[sort] ?? '').localeCompare(b[sort] ?? '');
+    });
+
+    let lastIface = null;
+    for (const l of sorted) {
+        if (group === 'interface' && l.interface !== lastIface) {
+            const hdr = tbody.insertRow();
+            const cell = hdr.insertCell();
+            cell.colSpan = 7;
+            cell.style.cssText = 'font-weight:bold;background:#f0f0f0;padding:4px 7px;border-bottom:2px solid #ccc';
+            cell.textContent = l.interface;
+            lastIface = l.interface;
+        }
+        const tr = tbody.insertRow();
+        tr.insertCell().textContent = l.interface;
+        tr.insertCell().textContent = l.ip;
+        tr.insertCell().textContent = l.mac;
+        tr.insertCell().textContent = l.hostname ?? '';
+        tr.insertCell().textContent = l.is_fixed ? 'yes' : '';
+        const expCell = tr.insertCell();
+        if (l.is_fixed) {
+            expCell.textContent = 'permanent';
+        } else {
+            const exp = new Date(l.expires);
+            expCell.textContent = exp.toLocaleString();
+            if (exp < Date.now()) expCell.style.color = '#c00';
+        }
+        const cell = tr.insertCell();
+        if (!l.is_fixed) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-sm';
+            btn.textContent = 'delete';
+            btn.onclick = async () => {
+                btn.disabled = true;
+                const dmsg = document.getElementById('dhcp-msg');
+                try {
+                    const r = await rpcCall('api.DhcpLeaseDelete', { ip: l.ip });
+                    if (r.found) {
+                        dhcpLeases = dhcpLeases.filter(x => x.ip !== l.ip);
+                        renderDhcpLeases();
+                        showMsg(dmsg, `Deleted ${l.ip}`, false);
+                    } else {
+                        showMsg(dmsg, `Not found: ${l.ip}`, true);
+                    }
+                } catch (e) {
+                    showMsg(dmsg, 'Error: ' + e.message, true);
+                    btn.disabled = false;
+                }
+            };
+            cell.appendChild(btn);
+        }
+    }
+}
+
+async function addDhcpLease() {
+    const mac  = document.getElementById('dhcp-add-mac').value.trim();
+    const ip   = document.getElementById('dhcp-add-ip').value.trim();
+    const host = document.getElementById('dhcp-add-host').value.trim();
+    const msg  = document.getElementById('dhcp-msg');
+    if (!mac || !ip) { showMsg(msg, 'MAC and IP required', true); return; }
+    try {
+        await rpcCall('api.DhcpLeaseAdd', { mac, ip, hostname: host });
+        document.getElementById('dhcp-add-mac').value = '';
+        document.getElementById('dhcp-add-ip').value = '';
+        document.getElementById('dhcp-add-host').value = '';
+        showMsg(msg, `Added ${ip}`, false);
+        await loadDhcpLeases();
+    } catch (e) {
+        showMsg(msg, 'Error: ' + e.message, true);
+    }
+}
+
+function startDhcpSSE() {
+    const es = new EventSource('/dhcp-log');
+    es.onmessage = (e) => {
+        if (dhcpLogPaused) return;
+        const ev = JSON.parse(e.data);
+        dhcpLogRows.unshift(ev);
+        if (dhcpLogRows.length > MAX_DHCP_LOG) dhcpLogRows.length = MAX_DHCP_LOG;
+        if (currentTab === 'dhcp') renderDhcpLog();
+    };
+}
+
+function renderDhcpLog() {
+    const tbody = document.getElementById('dhcp-log-tbody');
+    tbody.innerHTML = '';
+    for (const ev of dhcpLogRows) {
+        const tr = tbody.insertRow();
+        const ts = new Date(ev.timestamp);
+        tr.insertCell().textContent = ts.toTimeString().slice(0, 8);
+        tr.insertCell().textContent = ev.interface ?? '';
+        tr.insertCell().textContent = ev.mac ?? '';
+        tr.insertCell().textContent = ev.client_id ?? '';
+        tr.insertCell().textContent = ev.ip ?? '';
+        tr.insertCell().textContent = ev.hostname ?? '';
+        tr.insertCell().textContent = ev.msg_type ?? '';
+        const resultCell = tr.insertCell();
+        resultCell.textContent = ev.error ? `err: ${ev.error}` : (ev.result ?? '');
+        if (ev.error) resultCell.className = 'msg-err';
+    }
+}
+
 // --- Utilities ---
 
 function setText(id, text) {
@@ -636,9 +771,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('resume-btn').addEventListener('click', resumeHandler);
     document.getElementById('pause-resume-quick').addEventListener('click', resumeHandler);
 
+    document.getElementById('dhcp-refresh-btn').addEventListener('click', loadDhcpLeases);
+    document.getElementById('dhcp-add-btn').addEventListener('click', addDhcpLease);
+    document.getElementById('dhcp-group').addEventListener('change', renderDhcpLeases);
+    document.getElementById('dhcp-sort').addEventListener('change', renderDhcpLeases);
+    document.getElementById('dhcp-log-pause').addEventListener('change', e => {
+        dhcpLogPaused = e.target.checked;
+    });
+    document.getElementById('dhcp-log-clear').addEventListener('click', () => {
+        dhcpLogRows = [];
+        renderDhcpLog();
+    });
+
     setInterval(checkBlockingStatus, 5000);
     checkBlockingStatus();
     setInterval(tickEMA, EMA_TICK);
+    startDhcpSSE();
     startSSE();
     showTab('log');
 });

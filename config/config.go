@@ -12,6 +12,29 @@ import (
 	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
+// DhcpFixedEntry maps a hostname and MAC to a fixed IP address.
+type DhcpFixedEntry struct {
+	Host    string `json:"host"`
+	MAC     string `json:"mac"`
+	Address string `json:"fixed-address"`
+}
+
+// DhcpSubnetConfig holds the configuration for one DHCP subnet/interface.
+type DhcpSubnetConfig struct {
+	Interface        string           `json:"interface"`
+	Subnet           string           `json:"subnet"`
+	SubnetMask       string           `json:"subnet-mask"`
+	RangeStart       string           `json:"range-start"`
+	RangeEnd         string           `json:"range-end"`
+	DomainName       string           `json:"domain-name"`
+	Routers          []string         `json:"routers"`
+	DNS              []string         `json:"domain-name-servers"`
+	MaxLeaseTime     int              `json:"max-lease-time"`     // seconds; default 86400
+	DefaultLeaseTime int              `json:"default-lease-time"` // seconds; default 3600
+	LeaseFile        string           `json:"lease-file"`
+	Fixed            []DhcpFixedEntry `json:"fixed"`
+}
+
 type ProxyConfig struct {
 	sync.RWMutex
 	ListenAddr      []string
@@ -30,6 +53,7 @@ type ProxyConfig struct {
 	DohCert         string
 	DohKey          string
 	DohPath         string
+	DhcpConfigs     []DhcpSubnetConfig
 	StatsHandler    *statshandler.StatsHandler
 	Refresh         bool
 	RefreshInterval time.Duration

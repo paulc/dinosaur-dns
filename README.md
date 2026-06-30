@@ -2,9 +2,10 @@
 
 # Dinosaur DNS
 
-A DNS caching proxy for local networks. Supports UDP, DNS-over-TLS (DoT),
-and DNS-over-HTTPS (DoH) upstreams, an in-memory cache, qtype-aware
-blocklists, local authoritative entries, ACLs, and an optional HTTP API.
+A DNS caching proxy and DHCPv4 server for local networks. Supports UDP,
+DNS-over-TLS (DoT), and DNS-over-HTTPS (DoH) upstreams, an in-memory cache,
+qtype-aware blocklists, local authoritative entries, ACLs, an integrated
+DHCPv4 server with DNS integration, and an optional HTTP API.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a component overview.
 
@@ -244,6 +245,64 @@ curl -sk -X POST https://localhost:8443/dns-query \
   -H 'Content-Type: application/dns-message' --data-binary @query.bin
 ```
 
+## DHCP server
+
+Run an integrated DHCPv4 server on a local interface. DHCP leases are
+automatically registered as DNS A records for the duration of the lease.
+Requires root (or `CAP_NET_BIND_SERVICE` + `CAP_NET_RAW`) to bind port 67.
+
+Subnet config is passed as a JSON object via `--dhcp` (repeatable) or in the
+config file under the `"dhcp"` key:
+
+```
+sudo ./dinosaur -api -dhcp '{
+  "interface":    "eth0",
+  "subnet":       "192.168.1.0",
+  "subnet-mask":  "255.255.255.0",
+  "range-start":  "192.168.1.100",
+  "range-end":    "192.168.1.200",
+  "domain-name":  "home.local",
+  "routers":      ["192.168.1.1"],
+  "domain-name-servers": ["192.168.1.1"],
+  "default-lease-time": 3600,
+  "max-lease-time":     86400,
+  "lease-file":   "/var/lib/dinosaur/eth0.leases",
+  "fixed": [
+    {"host": "printer", "mac": "aa:bb:cc:dd:ee:ff", "fixed-address": "192.168.1.10"}
+  ]
+}'
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `interface` | yes | Network interface name |
+| `subnet` | yes | Network address |
+| `subnet-mask` | yes | Subnet mask |
+| `range-start` | yes | First IP in dynamic pool |
+| `range-end` | yes | Last IP in dynamic pool |
+| `domain-name` | no | Domain for DHCP option 15 and DNS registration |
+| `routers` | no | Default gateway(s) |
+| `domain-name-servers` | no | DNS server(s) offered to clients |
+| `default-lease-time` | no | Lease duration in seconds (default 3600) |
+| `max-lease-time` | no | Maximum lease duration in seconds (default 86400) |
+| `lease-file` | no | Path for lease persistence (default `<interface>.leases`) |
+| `fixed` | no | Fixed IP assignments (can be outside dynamic range) |
+
+Fixed entries use `{host, mac, fixed-address}`. Client identity uses DHCP option
+61 (client-id) if present, falling back to MAC address. ARP conflict detection
+is attempted before each OFFER (best-effort; skipped if raw socket unavailable).
+
+Lease admin API (requires `--api`):
+
+| Method | Description |
+|--------|-------------|
+| `api.DhcpLeases` | List all active leases |
+| `api.DhcpLeaseDelete` | Remove a dynamic lease by IP |
+| `api.DhcpLeaseAdd` | Add a static lease (MAC + IP + hostname) |
+
+DHCP event log is streamed as SSE at `GET /dhcp-log`. The web dashboard
+includes a DHCP tab showing the lease table and live event log.
+
 ## json-rpc utility
 
 `cmd/json-rpc` is a standalone CLI for calling any JSON-RPC 2.0 endpoint.
@@ -316,6 +375,8 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         JSON config file
   -debug
         Debug logging (default: false)
+  -dhcp value
+        DHCP subnet config as JSON object (multiple allowed)
   -discard
         Discard all log output (default: false)
   -dns64
