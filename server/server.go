@@ -10,6 +10,7 @@ import (
 	"github.com/paulc/dinosaur-dns/api"
 	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/doh"
 	"github.com/paulc/dinosaur-dns/proxy"
 )
 
@@ -115,6 +116,11 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 	// Start API
 	if proxy_config.Api {
 		go api.MakeApiHandler(proxy_config)()
+	}
+
+	// Start DoH server
+	if len(proxy_config.DohBind) > 0 {
+		go doh.StartDoH(proxy_config)
 	}
 
 	upstream := make([]string, len(proxy_config.Upstream))

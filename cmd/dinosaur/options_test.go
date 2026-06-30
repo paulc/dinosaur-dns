@@ -30,6 +30,10 @@ func TestGetUserConfig(t *testing.T) {
 		"-dns64-prefix", "1111::/96",
 		"-api",
 		"-api-bind", "127.0.0.1:9999",
+		"-doh", "127.0.0.1:8443",
+		"-doh-cert", "cert.pem",
+		"-doh-key", "key.pem",
+		"-doh-path", "/dns",
 		"-refresh",
 		"-refresh-interval", "60m",
 		"-debug",
@@ -57,6 +61,10 @@ func TestGetUserConfig(t *testing.T) {
 		user_config.Dns64Prefix != "1111::/96" ||
 		!user_config.Api ||
 		user_config.ApiBind != "127.0.0.1:9999" ||
+		slices.Compare(user_config.Doh, []string{"127.0.0.1:8443"}) != 0 ||
+		user_config.DohCert != "cert.pem" ||
+		user_config.DohKey != "key.pem" ||
+		user_config.DohPath != "/dns" ||
 		!user_config.Refresh ||
 		user_config.RefreshInterval != "60m" ||
 		!user_config.Debug ||

@@ -202,6 +202,48 @@ blocklist management (including a timed pause), cache inspection, config
 viewer with change tracking, and API reference. Full JSON-RPC documentation
 is available on the API tab of the dashboard.
 
+## DoH server
+
+Accept queries from downstream clients over DNS-over-HTTPS (RFC 8484).
+Supports both GET and POST request methods; HTTP/2 and keep-alive are
+enabled automatically. All proxy features (blocklist, cache, ACL, DNS64) apply
+exactly as they do for UDP/TCP clients.
+
+```
+# Listen on port 8443, auto-generate a self-signed certificate
+./dinosaur -doh 127.0.0.1:8443
+
+# Listen on all addresses of eth0, use a real certificate
+./dinosaur -doh eth0:443 -doh-cert /etc/ssl/doh.crt -doh-key /etc/ssl/doh.key
+
+# Custom path
+./dinosaur -doh 127.0.0.1:8443 -doh-path /resolve
+```
+
+Multiple `-doh` flags are accepted (one listener each). If `-doh-cert` and
+`-doh-key` are omitted a self-signed ECDSA-P256 certificate is generated at
+startup.
+
+| Flag | Description |
+|------|-------------|
+| `-doh` | Listen address/interface (default port 443; multiple allowed) |
+| `-doh-cert` | TLS certificate file (PEM) |
+| `-doh-key` | TLS private key file (PEM) |
+| `-doh-path` | Request path (default: `/dns-query`) |
+
+Equivalent JSON config keys: `doh`, `doh-cert`, `doh-key`, `doh-path`.
+
+Query a running DoH server:
+
+```
+# GET
+curl -sk "https://localhost:8443/dns-query?dns=$(echo -n <base64url-msg>)"
+
+# POST
+curl -sk -X POST https://localhost:8443/dns-query \
+  -H 'Content-Type: application/dns-message' --data-binary @query.bin
+```
+
 ## json-rpc utility
 
 `cmd/json-rpc` is a standalone CLI for calling any JSON-RPC 2.0 endpoint.
@@ -280,6 +322,14 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Enable DNS64 (default: false)
   -dns64-prefix string
         DNS64 prefix (default: 64:ff9b::/96)
+  -doh value
+        DoH listen address/interface (enables DoH server, default port 443)
+  -doh-cert string
+        DoH TLS certificate file (auto-generates self-signed if omitted)
+  -doh-key string
+        DoH TLS private key file
+  -doh-path string
+        DoH request path (default: /dns-query)
   -help
         Show usage
   -listen value

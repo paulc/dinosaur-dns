@@ -32,6 +32,10 @@ type UserConfig struct {
 	Dns64Prefix        string   `json:"dns64-prefix"`
 	Api                bool     `json:"api"`
 	ApiBind            string   `json:"api-bind"`
+	Doh                []string `json:"doh"`
+	DohCert            string   `json:"doh-cert"`
+	DohKey             string   `json:"doh-key"`
+	DohPath            string   `json:"doh-path"`
 	Refresh            bool     `json:"refresh"`
 	RefreshInterval    string   `json:"refresh-interval"`
 	Debug              bool     `json:"debug"`
@@ -150,6 +154,20 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	config.Api = user_config.Api
 	if user_config.ApiBind != "" {
 		config.ApiBind = user_config.ApiBind
+	}
+
+	// DoH server
+	for _, v := range user_config.Doh {
+		if addrs, err := util.ParseAddr(v, 443); err != nil {
+			return err
+		} else {
+			config.DohBind = append(config.DohBind, addrs...)
+		}
+	}
+	config.DohCert = user_config.DohCert
+	config.DohKey = user_config.DohKey
+	if user_config.DohPath != "" {
+		config.DohPath = user_config.DohPath
 	}
 
 	// Refresh Blocklist
