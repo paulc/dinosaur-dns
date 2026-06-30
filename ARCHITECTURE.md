@@ -24,6 +24,9 @@ client (UDP/TCP)
       |
       v
   api/               -- optional HTTP API + embedded web dashboard
+      |
+      v
+  doh/               -- optional DoH server for downstream clients (RFC 8484)
 ```
 
 ## Packages
@@ -99,6 +102,25 @@ API (JSON-RPC reference documentation).
 Can bind to a TCP address or a UNIX domain socket. When using a socket,
 a signal handler removes the socket file before re-raising the signal so
 context-based shutdown proceeds normally.
+
+**doh** -- optional HTTPS server (RFC 8484) for downstream DoH clients.
+`MakeDoHHandler` accepts GET (`?dns=<base64url>`) and POST
+(`Content-Type: application/dns-message`) requests, unpacks the wire-format
+DNS message, and passes it to the same `proxy.MakeHandler` function used by
+UDP/TCP listeners via a thin `dohResponseWriter` adapter. All proxy logic
+(blocklist, cache, ACL, DNS64) therefore applies without modification.
+
+TLS is configured via `MakeTLSConfig`; when cert/key files are absent a
+self-signed ECDSA-P256 certificate is generated in memory at startup.
+`NextProtos: ["h2", "http/1.1"]` enables HTTP/2 negotiation via ALPN so
+clients can multiplex multiple DNS queries over a single connection.
+Server-side timeouts (`ReadHeaderTimeout` 10 s, `ReadTimeout`/`WriteTimeout`
+15 s, `IdleTimeout` 120 s) prevent hung connections while keeping keep-alive
+functional.
+
+`ProxyConfig.DohBind`, `DohCert`, `DohKey`, `DohPath` mirror the `-doh*`
+flags. Default path is `/dns-query`; default port (via `util.ParseAddr`) is
+443.
 
 **util** -- shared helpers: `ParseAddr` (resolves interface names to IP
 addresses), `JsonRpcRequest` (generic JSON-RPC client), `MultiFlag` (flag

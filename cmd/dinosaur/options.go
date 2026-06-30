@@ -20,6 +20,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
 	var apiFlag = flag.Bool("api", false, "Enable API (default: false)")
 	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
+	var dohCertFlag = flag.String("doh-cert", "", "DoH TLS certificate file (auto-generates self-signed if omitted)")
+	var dohKeyFlag = flag.String("doh-key", "", "DoH TLS private key file")
+	var dohPathFlag = flag.String("doh-path", "", "DoH request path (default: /dns-query)")
 	var refreshFlag = flag.Bool("refresh", false, "Auto refresh blocklist (default: false)")
 	var refreshIntervalFlag = flag.String("refresh-interval", "", "Blocklist refresh interval (default: 24hrs)")
 	var debugFlag = flag.Bool("debug", false, "Debug log (default: false)")
@@ -59,6 +62,9 @@ func GetUserConfig() (*config.UserConfig, error) {
 
 	var aclFlag util.MultiFlag
 	flag.Var(&aclFlag, "acl", "Access control list (CIDR)")
+
+	var dohFlag util.MultiFlag
+	flag.Var(&dohFlag, "doh", "DoH listen address/interface (enables DoH server, default port 443)")
 
 	flag.Parse()
 
@@ -153,6 +159,20 @@ func GetUserConfig() (*config.UserConfig, error) {
 	user_config.Api = user_config.Api || *apiFlag
 	if *apiBindFlag != "" {
 		user_config.ApiBind = *apiBindFlag
+	}
+
+	// DoH server
+	for _, v := range dohFlag {
+		user_config.Doh = append(user_config.Doh, v)
+	}
+	if *dohCertFlag != "" {
+		user_config.DohCert = *dohCertFlag
+	}
+	if *dohKeyFlag != "" {
+		user_config.DohKey = *dohKeyFlag
+	}
+	if *dohPathFlag != "" {
+		user_config.DohPath = *dohPathFlag
 	}
 
 	// Blocklist refresh

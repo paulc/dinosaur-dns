@@ -26,6 +26,10 @@ type ProxyConfig struct {
 	Dns64Prefix     net.IPNet
 	Api             bool
 	ApiBind         string
+	DohBind         []string
+	DohCert         string
+	DohKey          string
+	DohPath         string
 	StatsHandler    *statshandler.StatsHandler
 	Refresh         bool
 	RefreshInterval time.Duration
@@ -46,6 +50,8 @@ func NewProxyConfig() *ProxyConfig {
 		BlockList:       blocklist.New(),
 		Dns64Prefix:     net.IPNet{IP: net.ParseIP("64:ff9b::"), Mask: net.CIDRMask(96, 128)},
 		ApiBind:         "127.0.0.1:8553",
+		DohBind:         make([]string, 0),
+		DohPath:         "/dns-query",
 		StatsHandler:    statshandler.New(1000),
 		Log:             logger.New(logger.NewStderr(false)),
 		RefreshInterval: time.Hour * 24,
