@@ -9,6 +9,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
 	"github.com/paulc/dinosaur-dns/config"
+	"github.com/paulc/dinosaur-dns/logger"
 )
 
 // Server manages one DHCP subnet bound to one interface.
@@ -18,6 +19,7 @@ type Server struct {
 	cfg      config.DhcpSubnetConfig
 	iface    *net.Interface
 	serverIP net.IP // our IP on this interface
+	log      *logger.Logger
 }
 
 // newServer creates and binds a Server (requires root for port 67).
@@ -37,7 +39,7 @@ func newServer(cfg config.DhcpSubnetConfig, pc *config.ProxyConfig) (*Server, er
 		return nil, err
 	}
 
-	s := &Server{cfg: cfg, iface: iface, serverIP: serverIP, db: db}
+	s := &Server{cfg: cfg, iface: iface, serverIP: serverIP, db: db, log: pc.Log}
 
 	srv, err := server4.NewServer(
 		cfg.Interface,
@@ -66,6 +68,11 @@ func (s *Server) Serve() {
 // Close shuts down the server.
 func (s *Server) Close() { s.srv.Close() }
 
+// debugf logs a DHCP debug message prefixed with the interface name.
+func (s *Server) debugf(format string, v ...any) {
+	s.log.Debugf("DHCP ["+s.cfg.Interface+"] "+format, v...)
+}
+
 // handle is the main DHCP dispatch function.
 func (s *Server) handle(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCPv4) {
 	if m.OpCode != dhcpv4.OpcodeBootRequest {
@@ -84,6 +91,10 @@ func (s *Server) handle(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCPv4) {
 		Hostname:  hostname,
 		MsgType:   m.MessageType().String(),
 	}
+
+	// Log received packet at debug level.
+	s.debugf("recv %s mac=%s client-id=%s hostname=%q ciaddr=%s xid=%s",
+		m.MessageType(), mac, clientID, hostname, m.ClientIPAddr, m.TransactionID)
 
 	switch m.MessageType() {
 	case dhcpv4.MessageTypeDiscover:
@@ -104,6 +115,7 @@ func (s *Server) handle(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCPv4) {
 func (s *Server) handleDiscover(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCPv4, clientID string, mac net.HardwareAddr, hostname string, ev Event) {
 	lease := s.db.allocate(clientID, mac, hostname)
 	if lease == nil {
+		s.debugf("send no-ip-available mac=%s client-id=%s", mac, clientID)
 		ev.Result = "no-ip-available"
 		globalLogger.Log(ev)
 		return
@@ -113,6 +125,7 @@ func (s *Server) handleDiscover(conn net.PacketConn, peer net.Addr, m *dhcpv4.DH
 
 	// ARP probe — skip if not available.
 	if conflict, _ := probeConflict(s.iface, ip); conflict {
+		s.debugf("send arp-conflict mac=%s yiaddr=%s", mac, ip)
 		s.db.markDeclined(ip)
 		ev.Result = "arp-conflict"
 		globalLogger.Log(ev)
@@ -137,6 +150,8 @@ func (s *Server) handleDiscover(conn net.PacketConn, peer net.Addr, m *dhcpv4.DH
 		globalLogger.Log(ev)
 		return
 	}
+	s.debugf("send OFFER mac=%s yiaddr=%s lease=%ds",
+		mac, ip, uint32(time.Until(lease.Expires).Seconds()))
 	ev.IP = ip.String()
 	ev.Result = "offer"
 	globalLogger.Log(ev)
@@ -148,12 +163,14 @@ func (s *Server) handleRequest(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHC
 	requestedIP := m.Options.Get(dhcpv4.OptionRequestedIPAddress)
 
 	var targetIP net.IP
+	var phase string
 
 	if serverIDOpt != nil {
 		// SELECTING: client responding to our OFFER.
+		phase = "SELECTING"
 		sid := net.IP(serverIDOpt)
 		if !sid.Equal(s.serverIP) {
-			// Not for us.
+			s.debugf("recv REQUEST %s mac=%s — not for us (server-id=%s)", phase, mac, sid)
 			return
 		}
 		if requestedIP != nil {
@@ -161,13 +178,18 @@ func (s *Server) handleRequest(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHC
 		}
 	} else if !m.ClientIPAddr.Equal(net.IPv4zero) {
 		// RENEWING or REBINDING.
+		phase = "RENEWING"
 		targetIP = m.ClientIPAddr
 	} else if requestedIP != nil {
 		// INIT-REBOOT.
+		phase = "INIT-REBOOT"
 		targetIP = net.IP(requestedIP)
 	}
 
+	s.debugf("recv REQUEST %s mac=%s client-id=%s target=%s", phase, mac, clientID, targetIP)
+
 	if targetIP == nil {
+		s.debugf("send NAK mac=%s — no target IP", mac)
 		s.sendNAK(conn, m, "no target IP")
 		ev.Result = "nak"
 		globalLogger.Log(ev)
@@ -182,6 +204,7 @@ func (s *Server) handleRequest(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHC
 	}
 
 	if lease == nil {
+		s.debugf("send NAK mac=%s — no lease for %s", mac, targetIP)
 		s.sendNAK(conn, m, "no lease")
 		ev.IP = targetIP.String()
 		ev.Result = "nak"
@@ -208,12 +231,15 @@ func (s *Server) handleRequest(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHC
 		globalLogger.Log(ev)
 		return
 	}
+	s.debugf("send ACK mac=%s yiaddr=%s lease=%ds hostname=%q",
+		mac, ip, uint32(time.Until(lease.Expires).Seconds()), lease.Hostname)
 	ev.IP = ip.String()
 	ev.Result = "ack"
 	globalLogger.Log(ev)
 }
 
 func (s *Server) handleRelease(m *dhcpv4.DHCPv4, clientID string, ev Event) {
+	s.debugf("recv RELEASE mac=%s client-id=%s ciaddr=%s", m.ClientHWAddr, clientID, m.ClientIPAddr)
 	s.db.release(clientID, m.ClientIPAddr.To4())
 	ev.IP = m.ClientIPAddr.String()
 	ev.Result = "released"
@@ -222,6 +248,7 @@ func (s *Server) handleRelease(m *dhcpv4.DHCPv4, clientID string, ev Event) {
 
 func (s *Server) handleInform(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCPv4, ev Event) {
 	if m.ClientIPAddr.Equal(net.IPv4zero) {
+		s.debugf("recv INFORM mac=%s — ignored (no ciaddr)", m.ClientHWAddr)
 		ev.Result = "ignored-no-ciaddr"
 		globalLogger.Log(ev)
 		return
@@ -241,6 +268,8 @@ func (s *Server) handleInform(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCP
 
 	if err := s.send(conn, m, reply); err != nil {
 		ev.Error = err.Error()
+	} else {
+		s.debugf("send ACK(INFORM) mac=%s ciaddr=%s", m.ClientHWAddr, m.ClientIPAddr)
 	}
 	ev.IP = m.ClientIPAddr.String()
 	ev.Result = "ack-inform"
@@ -250,8 +279,11 @@ func (s *Server) handleInform(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCP
 func (s *Server) handleDecline(m *dhcpv4.DHCPv4, ev Event) {
 	if requestedIP := m.Options.Get(dhcpv4.OptionRequestedIPAddress); requestedIP != nil {
 		ip := net.IP(requestedIP).To4()
+		s.debugf("recv DECLINE mac=%s ip=%s", m.ClientHWAddr, ip)
 		s.db.markDeclined(ip)
 		ev.IP = ip.String()
+	} else {
+		s.debugf("recv DECLINE mac=%s (no requested-ip)", m.ClientHWAddr)
 	}
 	ev.Result = "declined"
 	globalLogger.Log(ev)
