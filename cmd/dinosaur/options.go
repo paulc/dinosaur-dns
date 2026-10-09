@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,13 +14,72 @@ import (
 	"github.com/paulc/dinosaur-dns/util"
 )
 
-func GetUserConfig() (*config.UserConfig, error) {
+// loadConfigFile reads a JSON config file (or URL) into user_config. An empty
+// (or whitespace-only) file is treated as an empty config. Unknown keys and
+// trailing data are errors.
+func loadConfigFile(path string, user_config *config.UserConfig) error {
+	r, err := util.UrlOpen(path)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	buf, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(buf)) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(buf))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(user_config); err != nil {
+		var offset int64 = -1
+		var syntaxErr *json.SyntaxError
+		var typeErr *json.UnmarshalTypeError
+		switch {
+		case errors.As(err, &syntaxErr):
+			offset = syntaxErr.Offset
+		case errors.As(err, &typeErr):
+			offset = typeErr.Offset
+		}
+		if offset >= 0 {
+			line, col := lineCol(buf, offset)
+			return fmt.Errorf("%s:%d:%d: %w", path, line, col, err)
+		}
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if dec.More() {
+		return fmt.Errorf("%s: unexpected data after config object", path)
+	}
+	return nil
+}
+
+// lineCol converts a json error offset (bytes read, including the offending
+// character) to the 1-based line and column of the last byte read
+func lineCol(buf []byte, offset int64) (line, col int) {
+	offset--
+	if offset > int64(len(buf)) {
+		offset = int64(len(buf))
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	before := buf[:offset]
+	line = bytes.Count(before, []byte("\n")) + 1
+	col = int(offset) - bytes.LastIndexByte(before, '\n')
+	return
+}
+
+// GetUserConfig builds the user config from the JSON config file (if any) and
+// command line flags. configTest is true if -config-test was given.
+func GetUserConfig() (user_config *config.UserConfig, configTest bool, err error) {
 
 	// Command line flags
 
 	var helpFlag = flag.Bool("help", false, "Show usage")
 	var versionFlag = flag.Bool("version", false, "Show version")
 	var configFlag = flag.String("config", "", "JSON config file")
+	var configTestFlag = flag.String("config-test", "", "Check JSON config file and print normalised config (with defaults) to stdout")
 	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
 	var apiFlag = flag.Bool("api", false, "Enable API (default: false)")
@@ -88,21 +149,20 @@ func GetUserConfig() (*config.UserConfig, error) {
 		os.Exit(0)
 	}
 
-	user_config := config.NewUserConfig()
+	user_config = config.NewUserConfig()
 
 	// Get JSON config file first
-	if len(*configFlag) != 0 {
-		r, err := util.UrlOpen(*configFlag)
-		if err != nil {
-			return nil, err
+	if *configFlag != "" && *configTestFlag != "" {
+		return nil, true, fmt.Errorf("-config and -config-test are mutually exclusive")
+	}
+	if *configTestFlag != "" {
+		configTest = true
+		if err := loadConfigFile(*configTestFlag, user_config); err != nil {
+			return nil, configTest, err
 		}
-		defer r.Close()
-		buf, err := io.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-		if err = json.Unmarshal(buf, user_config); err != nil {
-			return nil, err
+	} else if *configFlag != "" {
+		if err := loadConfigFile(*configFlag, user_config); err != nil {
+			return nil, configTest, err
 		}
 	}
 
@@ -132,7 +192,7 @@ func GetUserConfig() (*config.UserConfig, error) {
 	for _, v := range bootstrapHostFlag {
 		name, addrs, ok := strings.Cut(v, "=")
 		if !ok || name == "" || addrs == "" {
-			return nil, fmt.Errorf("Invalid -bootstrap-host (format: 'hostname=ip[,ip...]'): %s", v)
+			return nil, configTest, fmt.Errorf("Invalid -bootstrap-host (format: 'hostname=ip[,ip...]'): %s", v)
 		}
 		if user_config.BootstrapHosts == nil {
 			user_config.BootstrapHosts = make(map[string][]string)
@@ -224,15 +284,17 @@ func GetUserConfig() (*config.UserConfig, error) {
 	user_config.Discard = user_config.Discard || *discardFlag
 
 	// Setuid
-	user_config.Setuid = *setuidFlag
+	if *setuidFlag != "" {
+		user_config.Setuid = *setuidFlag
+	}
 
 	// Set defaults if necessary
 	if len(user_config.Listen) == 0 {
-		user_config.Listen = append(user_config.Listen, "lo0:8053")
+		user_config.Listen = append(user_config.Listen, config.DefaultListen...)
 	}
 	if len(user_config.Upstream) == 0 {
-		user_config.Upstream = append(user_config.Upstream, "tls://1.1.1.1:853", "tls://1.0.0.1:853")
+		user_config.Upstream = append(user_config.Upstream, config.DefaultUpstream...)
 	}
 
-	return user_config, nil
+	return user_config, configTest, nil
 }

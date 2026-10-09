@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"regexp"
 	"strings"
@@ -83,6 +82,12 @@ func (user_config UserConfig) WithDefaults() UserConfig {
 	}
 	if user_config.BootstrapHosts == nil {
 		user_config.BootstrapHosts = make(map[string][]string)
+	}
+	if len(user_config.Listen) == 0 {
+		user_config.Listen = append([]string{}, DefaultListen...)
+	}
+	if len(user_config.Upstream) == 0 {
+		user_config.Upstream = append([]string{}, DefaultUpstream...)
 	}
 	if user_config.UpstreamErrMax == 0 {
 		user_config.UpstreamErrMax = DefaultUpstreamErrMax
@@ -232,10 +237,10 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	if user_config.RefreshInterval != "" {
 		duration, err := time.ParseDuration(user_config.RefreshInterval)
 		if err != nil {
-			return err
+			return fmt.Errorf("refresh-interval: %s", err)
 		}
 		if duration < time.Second {
-			return fmt.Errorf("Invalid duration: %s", duration)
+			return fmt.Errorf("refresh-interval: Invalid duration: %s", duration)
 		}
 		config.RefreshInterval = duration
 	}
@@ -254,13 +259,13 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	// Setuid
 	if user_config.Setuid != "" {
 		if unix.Getuid() != 0 {
-			log.Fatal("setuid: Must be running as root")
+			return fmt.Errorf("setuid: Must be running as root")
 		}
 		config.Setuid = true
 		var err error
 		config.SetuidUid, config.SetuidGid, err = util.SplitId(user_config.Setuid)
 		if err != nil {
-			log.Fatalf("setuid: %s", err)
+			return fmt.Errorf("setuid: %s", err)
 		}
 	}
 
