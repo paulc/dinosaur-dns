@@ -33,7 +33,7 @@ interface) and uses `tls://1.1.1.1:853` and `tls://1.0.0.1:853`.
 
 | Format | Protocol |
 |--------|----------|
-| `1.1.1.1:53` | UDP (port required) |
+| `1.1.1.1:53` | UDP (port optional, default 53) |
 | `tls://1.1.1.1:853` | DNS-over-TLS |
 | `https://cloudflare-dns.com/dns-query` | DNS-over-HTTPS |
 
@@ -44,11 +44,18 @@ the Config tab of the web dashboard (or `api.SetUpstream`).
 
 ### Bootstrapping DoT/DoH upstream hostnames
 
-DoT/DoH upstreams given by hostname (e.g. `https://dns.google/dns-query`) are
-resolved using the system resolver by default. If the system resolver points
-back at dinosaur (or is otherwise unavailable) you can specify bootstrap
-resolvers (IP only) and static fallback mappings, which are used if the
-bootstrap lookup fails (e.g. the network is down at startup):
+DoT/DoH upstreams given by hostname (e.g. `https://dns.google/dns-query`)
+must be resolved before dinosaur can connect to them. This happens whenever a
+new upstream connection is opened, in this order:
+
+1. If any `-bootstrap` resolvers (`ip[:port]`, default port 53) are given,
+   A/AAAA queries are sent directly to each one in turn and the first to
+   return addresses is used. The system resolver (including `/etc/hosts`) is
+   **not** used.
+2. Otherwise the system resolver is used.
+3. If that lookup fails (e.g. the network is down at startup, or the system
+   resolver points back at dinosaur) the static `-bootstrap-host` mappings
+   are used.
 
 ```
 ./dinosaur -upstream https://dns.google/dns-query \
@@ -56,7 +63,9 @@ bootstrap lookup fails (e.g. the network is down at startup):
            -bootstrap-host dns.google=8.8.8.8,8.8.4.4
 ```
 
-TLS certificates are still verified against the upstream hostname.
+TLS certificates are always verified against the upstream hostname.
+Upstreams given as IP addresses don't need bootstrapping, and plain UDP
+upstreams given by hostname always use the system resolver.
 
 ## Listen address formats
 
@@ -340,7 +349,7 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
   -blocklist-from-hosts value
         Blocklist from /etc/hosts format file or URL
   -bootstrap value
-        Bootstrap resolver for DoT/DoH upstream hostnames [ip[:port]] (default: system resolver)
+        Resolver for DoT/DoH upstream hostnames, used instead of the system resolver [ip[:port]] (default: system resolver)
   -bootstrap-host value
         Fallback DoT/DoH upstream hostname mapping if bootstrap lookup fails (format: 'hostname=ip[,ip...]')
   -config string
