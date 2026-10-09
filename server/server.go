@@ -3,12 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/api"
-	"github.com/paulc/dinosaur-dns/blocklist"
 	"github.com/paulc/dinosaur-dns/config"
 	"github.com/paulc/dinosaur-dns/doh"
 	"github.com/paulc/dinosaur-dns/proxy"
@@ -25,7 +25,9 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 	// Register handler before starting listeners so no query can arrive with an empty mux
 	dns.HandleFunc(".", proxy.MakeHandler(proxy_config))
 
-	// Start listeners
+	// Start listeners - bind synchronously so that failures (e.g. a missing
+	// interface) are logged and skipped rather than being fatal
+	listening := 0
 	for _, listenAddr := range proxy_config.ListenAddr {
 
 		net_udp, net_tcp := "udp", "tcp"
@@ -39,32 +41,42 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		}
 
 		// Start UDP server
-		server_udp := &dns.Server{
-			Addr: listenAddr,
-			Net:  net_udp,
-			// Accept large UDP messages (we pass through EDNS0
-			// messages to the upstream resolver - this just ensures
-			// that we can handle these)
-			UDPSize: 4096,
-		}
-
-		go func() {
-			if err := server_udp.ListenAndServe(); err != nil {
-				log.Fatal(listenAddr, ": ", err)
+		if pc, err := net.ListenPacket(net_udp, listenAddr); err != nil {
+			log.Printf("Error: UDP listener %s: %s", listenAddr, err)
+		} else {
+			server_udp := &dns.Server{
+				PacketConn: pc,
+				// Accept large UDP messages (we pass through EDNS0
+				// messages to the upstream resolver - this just ensures
+				// that we can handle these)
+				UDPSize: 4096,
 			}
-		}()
+			listening++
+			go func() {
+				if err := server_udp.ActivateAndServe(); err != nil {
+					log.Printf("Error: UDP listener %s: %s", listenAddr, err)
+				}
+			}()
+		}
 
 		// Start TCP server
-		server_tcp := &dns.Server{
-			Addr: listenAddr,
-			Net:  net_tcp,
-		}
-
-		go func() {
-			if err := server_tcp.ListenAndServe(); err != nil {
-				log.Fatal(listenAddr, ": ", err)
+		if l, err := net.Listen(net_tcp, listenAddr); err != nil {
+			log.Printf("Error: TCP listener %s: %s", listenAddr, err)
+		} else {
+			server_tcp := &dns.Server{
+				Listener: l,
 			}
-		}()
+			listening++
+			go func() {
+				if err := server_tcp.ActivateAndServe(); err != nil {
+					log.Printf("Error: TCP listener %s: %s", listenAddr, err)
+				}
+			}()
+		}
+	}
+
+	if listening == 0 {
+		log.Printf("Error: no DNS listeners active")
 	}
 
 	/*
@@ -100,14 +112,10 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		go func() {
 			for {
 				time.Sleep(proxy_config.RefreshInterval)
-				newBL := blocklist.New()
-				if err := proxy_config.UserConfig.UpdateBlockList(newBL); err != nil {
+				if count, err := proxy_config.RefreshBlockList(); err != nil {
 					log.Printf("Error updating blocklist: %s", err)
 				} else {
-					proxy_config.Lock()
-					proxy_config.BlockList = newBL
-					proxy_config.Unlock()
-					log.Printf("Updated Blocklist: %d entries", proxy_config.BlockList.Count())
+					log.Printf("Updated Blocklist: %d entries", count)
 				}
 			}
 		}()
@@ -123,14 +131,11 @@ func StartServer(ctx context.Context, proxy_config *config.ProxyConfig, ready ch
 		go doh.StartDoH(proxy_config)
 	}
 
-	upstream := make([]string, len(proxy_config.Upstream))
-	for i, v := range proxy_config.Upstream {
-		upstream[i] = v.String()
-	}
+	upstream := proxy_config.GetUpstreams()
 
 	log.Printf("Started server: %s", strings.Join(proxy_config.ListenAddr, " "))
 	log.Printf("Upstream: %s", strings.Join(upstream, " "))
-	log.Printf("Blocklist: %d entries", proxy_config.BlockList.Count())
+	log.Printf("Blocklist: %d entries", proxy_config.GetBlockList().Count())
 	log.Printf("ACL: %s", strings.Join(AclToString(proxy_config.Acl), " "))
 
 	// Make sure servers are listening

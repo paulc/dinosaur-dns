@@ -213,12 +213,19 @@ func StartDoH(proxyConfig *config.ProxyConfig) {
 			// releasing clients that have gone away without closing cleanly.
 			IdleTimeout: 120 * time.Second,
 		}
+		// Bind synchronously so a failure (e.g. missing interface) is logged
+		// and skipped rather than being fatal
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Printf("Error: DoH listener %s: %s", addr, err)
+			continue
+		}
 		go func() {
 			log.Printf("Starting DoH listener: %s%s", addr, proxyConfig.DohPath)
 			// Empty cert/key paths are correct here: TLSConfig.Certificates is
 			// already populated, so ServeTLS skips the LoadX509KeyPair call.
-			if err := srv.ListenAndServeTLS("", ""); err != nil {
-				log.Fatalf("DoH %s: %s", addr, err)
+			if err := srv.ServeTLS(ln, "", ""); err != nil {
+				log.Printf("Error: DoH listener %s: %s", addr, err)
 			}
 		}()
 	}

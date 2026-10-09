@@ -85,20 +85,20 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 			return
 		}
 
-		// Upstream error - if this is the first upstream we count errors and try to switch if threshold exceeded
+		// Upstream error - if this is the active upstream we count errors and try to switch if threshold exceeded
+		// (skip if the upstream has been rotated concurrently or changed via the API)
 		if i == 0 {
 			config.Lock()
-			config.UpstreamErr++
-			if config.UpstreamErr > 3 {
-				// Demote upstream
-				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
-				config.UpstreamErr = 0
-				demoted := config.Upstream
-				config.Unlock()
-				log.Printf("Error threshold exceeded - demoting upstream: %s", demoted)
-			} else {
-				config.Unlock()
+			if len(config.Upstream) > 0 && config.Upstream[0] == r {
+				config.UpstreamErr++
+				if config.UpstreamErr > config.UpstreamErrMax {
+					// Demote upstream
+					config.Upstream = append(config.Upstream[1:], config.Upstream[0])
+					config.UpstreamErr = 0
+					log.Printf("Error threshold exceeded - demoting upstream: %s", config.Upstream)
+				}
 			}
+			config.Unlock()
 		}
 		log.Debugf("Upstream error <%s>: %s", r, err)
 	}

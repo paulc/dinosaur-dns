@@ -38,9 +38,13 @@ client (UDP/TCP)
 state). `GetProxyConfig` translates user config into live objects: resolver
 instances, parsed CIDRs, populated cache, etc.
 
-**server** -- binds UDP and TCP listeners using `github.com/miekg/dns`,
-starts the cache-flush goroutine, blocklist-refresh goroutine, and optional
-API goroutine, then blocks on a context for graceful shutdown.
+**server** -- binds UDP and TCP listeners using `github.com/miekg/dns`
+(listeners that fail to bind are logged and skipped), starts the cache-flush
+goroutine, blocklist-refresh goroutine, and optional API goroutine, then
+blocks on a context for graceful shutdown. Blocklist refresh
+(`ProxyConfig.RefreshBlockList`) rebuilds the list from the user config and
+re-applies web UI changes via the `BlockListOverlay` hook registered by the
+API before swapping it in.
 
 **proxy** -- `MakeHandler` returns the `dns.HandlerFunc` registered with the
 miekg mux. For each query: check ACL, check blocklist, consult cache, call
@@ -58,6 +62,10 @@ interface (`Resolve(log, msg) (msg, error)`):
   EOF.
 - `DohResolver` -- DNS over HTTPS. Single `*http.Client` with a custom
   transport: HTTP/2, TLS session cache, keep-alive, 5 s timeout.
+
+DoT/DoH upstream hostnames are resolved via `Bootstrap`: the system resolver
+(or configured bootstrap resolvers), falling back to static hostname -> IP
+mappings if the lookup fails.
 
 **cache** -- `DNSCache` wraps `map[DNSCacheKey]DNSCacheItem` behind an
 `RWMutex`. `Add` stores upstream responses with TTL expiry. `AddRR` stores

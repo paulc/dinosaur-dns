@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -68,19 +69,30 @@ type dotConn struct {
 // closed and replaced. A shared tls.Config with a session cache enables TLS
 // session resumption across all connections.
 type DotResolver struct {
-	upstream string
-	address  string
-	client   dns.Client    // shared across all connections; holds TLS config and timeouts
-	pool     chan *dotConn // buffered channel acts as the idle-connection pool
+	upstream  string
+	address   string
+	client    dns.Client    // shared across all connections; holds timeouts
+	tlsConfig *tls.Config   // shared TLS config (ServerName + session cache)
+	bootstrap *Bootstrap    // resolves upstream hostname before dialing
+	pool      chan *dotConn // buffered channel acts as the idle-connection pool
 }
 
-// newConn dials a fresh TLS connection to the upstream.
+// newConn dials a fresh TLS connection to the upstream. The upstream host is
+// resolved via the bootstrap resolver; TLS verification uses the original
+// hostname (tlsConfig.ServerName).
 func (r *DotResolver) newConn() (*dotConn, error) {
-	conn, err := r.client.Dial(r.address)
+	ctx, cancel := context.WithTimeout(context.Background(), upstreamTimeout)
+	defer cancel()
+	raw, err := r.bootstrap.DialContext(ctx, "tcp", r.address)
 	if err != nil {
 		return nil, fmt.Errorf("DoT dial: %w", err)
 	}
-	return &dotConn{conn: conn}, nil
+	tlsConn := tls.Client(raw, r.tlsConfig)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		raw.Close()
+		return nil, fmt.Errorf("DoT handshake: %w", err)
+	}
+	return &dotConn{conn: &dns.Conn{Conn: tlsConn, UDPSize: r.client.UDPSize}}, nil
 }
 
 // isAlive reports whether an idle pooled connection is still open.
@@ -166,27 +178,40 @@ func (r *DotResolver) Resolve(log *logger.Logger, q *dns.Msg) (out *dns.Msg, err
 func (r *DotResolver) String() string { return r.upstream }
 
 func NewDotResolver(upstream string) *DotResolver {
+	return NewDotResolverWithBootstrap(upstream, nil)
+}
+
+// NewDotResolverWithBootstrap creates a DoT resolver which resolves the
+// upstream hostname using bootstrap (nil = system resolver).
+func NewDotResolverWithBootstrap(upstream string, bootstrap *Bootstrap) *DotResolver {
+	if bootstrap == nil {
+		bootstrap = NewBootstrap(nil, nil)
+	}
 	address := strings.TrimPrefix(upstream, "tls://")
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+		address = net.JoinHostPort(address, "853")
+	}
 	return &DotResolver{
 		upstream: upstream,
 		address:  address,
 		client: dns.Client{
 			Net: "tcp-tls",
-			// Shared TLS config with a session cache so that reconnections
-			// after idle-timeout drops can resume the TLS session (~0 RTT
-			// overhead) rather than doing a full handshake (~1 RTT extra).
-			TLSConfig: &tls.Config{
-				ClientSessionCache: tls.NewLRUClientSessionCache(64),
-			},
-			// Timeout covers both ExchangeWithConn and (via Dialer) the
-			// initial TLS handshake, bounding worst-case latency.
+			// Timeout bounds ExchangeWithConn; the dial + TLS handshake is
+			// bounded separately in newConn.
 			Timeout: upstreamTimeout,
-			Dialer: &net.Dialer{
-				Timeout:   upstreamTimeout,
-				KeepAlive: 30 * time.Second,
-			},
 		},
-		pool: make(chan *dotConn, dotPoolSize),
+		// Shared TLS config with a session cache so that reconnections
+		// after idle-timeout drops can resume the TLS session (~0 RTT
+		// overhead) rather than doing a full handshake (~1 RTT extra).
+		// ServerName is set explicitly as we dial the resolved IP.
+		tlsConfig: &tls.Config{
+			ServerName:         host,
+			ClientSessionCache: tls.NewLRUClientSessionCache(64),
+		},
+		bootstrap: bootstrap,
+		pool:      make(chan *dotConn, dotPoolSize),
 	}
 }
 
@@ -244,6 +269,15 @@ func (r *DohResolver) Resolve(log *logger.Logger, q *dns.Msg) (*dns.Msg, error) 
 func (r *DohResolver) String() string { return r.Upstream }
 
 func NewDohResolver(upstream string) *DohResolver {
+	return NewDohResolverWithBootstrap(upstream, nil)
+}
+
+// NewDohResolverWithBootstrap creates a DoH resolver which resolves the
+// upstream hostname using bootstrap (nil = system resolver).
+func NewDohResolverWithBootstrap(upstream string, bootstrap *Bootstrap) *DohResolver {
+	if bootstrap == nil {
+		bootstrap = NewBootstrap(nil, nil)
+	}
 	return &DohResolver{
 		Upstream: upstream,
 		client: &http.Client{
@@ -260,10 +294,9 @@ func NewDohResolver(upstream string) *DohResolver {
 				IdleConnTimeout:       90 * time.Second,
 				TLSHandshakeTimeout:   upstreamTimeout,
 				ExpectContinueTimeout: 1 * time.Second,
-				DialContext: (&net.Dialer{
-					Timeout:   upstreamTimeout,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
+				// Resolve upstream hostname via bootstrap; TLS still verifies
+				// against the hostname in the request URL.
+				DialContext: bootstrap.DialContext,
 			},
 		},
 	}
