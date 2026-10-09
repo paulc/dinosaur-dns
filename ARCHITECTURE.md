@@ -33,23 +33,41 @@ client (UDP/TCP)
 
 **cmd/dinosaur** -- entry point. Parses flags and JSON config via
 `GetUserConfig`, builds a `ProxyConfig`, calls `server.StartServer`.
+`Version` (printed by `-version` and logged at startup) can be overridden at
+build time with `-ldflags "-X main.Version=x.y.z"`.
 
 **config** -- `UserConfig` (JSON-serialisable) and `ProxyConfig` (runtime
 state). `GetProxyConfig` translates user config into live objects: resolver
-instances, parsed CIDRs, populated cache, etc.
+instances (sharing one `resolver.Bootstrap` built by `GetBootstrap`), parsed
+CIDRs, populated cache, etc. Default values for unset options are defined
+once as `Default*` constants, used by `NewProxyConfig` and by
+`UserConfig.WithDefaults` (which also replaces nil lists/maps with empty ones
+so the config serialises without nulls).
 
-**server** -- binds UDP and TCP listeners using `github.com/miekg/dns`
-(listeners that fail to bind are logged and skipped), starts the cache-flush
+`ProxyConfig` embeds an `RWMutex` guarding the fields that change at
+runtime, with accessors: `GetUpstreams` / `SetActiveUpstream` (the upstream
+list is rotated so the selected upstream is first, preserving fallback order;
+the error count is reset), `GetBlockList` / `RefreshBlockList`.
+`UpstreamErrMax` is the demotion threshold (`-upstream-error-threshold`,
+default 3).
+
+**server** -- binds UDP and TCP listeners synchronously (`net.ListenPacket` /
+`net.Listen`, then `dns.Server.ActivateAndServe`) so that listeners which fail
+to bind (e.g. a missing interface) are logged and skipped rather than being
+fatal; an error is logged if none bind. Starts the cache-flush
 goroutine, blocklist-refresh goroutine, and optional API goroutine, then
 blocks on a context for graceful shutdown. Blocklist refresh
 (`ProxyConfig.RefreshBlockList`) rebuilds the list from the user config and
 re-applies web UI changes via the `BlockListOverlay` hook registered by the
-API before swapping it in.
+API, then swaps it in under the config write lock. API blocklist mutations
+hold the read lock so they can't be lost to a concurrent refresh.
 
 **proxy** -- `MakeHandler` returns the `dns.HandlerFunc` registered with the
 miekg mux. For each query: check ACL, check blocklist, consult cache, call
 `resolve` (which fans out to upstream resolvers with automatic demotion on
-failure), optionally synthesise DNS64 AAAA records, write response.
+failure - errors are only counted against the upstream that is still active,
+so a concurrent rotation or manual change isn't double counted), optionally
+synthesise DNS64 AAAA records, write response.
 `CheckUpstream` validates a single upstream at startup.
 
 **resolver** -- three resolver types, all implementing the `Resolver`
@@ -59,13 +77,22 @@ interface (`Resolve(log, msg) (msg, error)`):
   with a 5 s timeout.
 - `DotResolver` -- DNS over TLS. Channel-based idle-connection pool (size 5)
   with health-check on reuse, TLS session resumption, and retry on transient
-  EOF.
+  EOF. New connections are dialled via `Bootstrap.DialContext` and the TLS
+  handshake is done with `tls.Client` using the upstream hostname as
+  `ServerName`.
 - `DohResolver` -- DNS over HTTPS. Single `*http.Client` with a custom
-  transport: HTTP/2, TLS session cache, keep-alive, 5 s timeout.
+  transport: HTTP/2, TLS session cache, keep-alive, 5 s timeout. The
+  transport's `DialContext` is `Bootstrap.DialContext` (TLS verification
+  still uses the hostname from the URL).
 
-DoT/DoH upstream hostnames are resolved via `Bootstrap`: the system resolver
-(or configured bootstrap resolvers), falling back to static hostname -> IP
-mappings if the lookup fails.
+`Bootstrap` (`bootstrap.go`) resolves DoT/DoH upstream hostnames. If
+bootstrap resolvers are configured, A/AAAA queries are sent directly to each
+in turn with `dns.Client` (2 s timeout, A and AAAA in parallel) and the system
+resolver is never used; otherwise `net.DefaultResolver` is used. If the
+lookup fails the static hostname -> IP mappings are used. `DialContext` tries
+each resolved address in turn. IP literals bypass lookup. The
+`New*Resolver` constructors use a system-resolver `Bootstrap`;
+`New*ResolverWithBootstrap` take an explicit one.
 
 **cache** -- `DNSCache` wraps `map[DNSCacheKey]DNSCacheItem` behind an
 `RWMutex`. `Add` stores upstream responses with TTL expiry. `AddRR` stores
@@ -82,8 +109,8 @@ list.
 - `GET /ping` -- health check
 - `POST /api` -- JSON-RPC 2.0 endpoint (gorilla/rpc): Config, CacheAdd,
   CacheDelete, CacheDebug, BlockListCount, BlockListAdd, BlockListDelete,
-  BlockListList, GetBlockingStatus, PauseBlocking, ResumeBlocking,
-  GetChanges, GetMergedConfig
+  BlockListList, GetUpstreams, SetUpstream, GetBlockingStatus,
+  PauseBlocking, ResumeBlocking, GetChanges, GetMergedConfig
 - `GET /log` -- SSE stream of recent query log entries
 - `GET /static/*` -- embedded web dashboard (plain JS, no external dependencies)
 
@@ -94,7 +121,15 @@ and local RR deletions of startup entries (`localRRDeletes`). Add/remove
 operations on the same entry cancel out. Keys are normalised via
 `normalizeBlockEntry` so `example.com:A` and `example.com:AAAA` are distinct.
 `GetMergedConfig` produces a JSON `UserConfig` combining startup config with
-all accumulated changes, suitable for use as a new config file.
+all accumulated changes, suitable for use as a new config file. Both it and
+`Config` return the config with defaults filled in (`WithDefaults`).
+`applyBlockChanges` re-applies the block changes to a new blocklist;
+`NewApiService` registers it as `ProxyConfig.BlockListOverlay` so changes
+survive a blocklist refresh.
+
+`GetUpstreams` returns the upstreams in current order (first is active) with
+the error count and threshold; `SetUpstream` makes one of the configured
+upstreams active (upstreams can't be added or removed).
 
 `ProxyConfig.BlockPauseUntil` (`time.Time`) stores the resume time for a
 timed blocking pause. The proxy reads it under `RLock` alongside the
@@ -104,7 +139,8 @@ The web dashboard (served from embedded `api/static/`) has five tabs: Log
 (SSE query log with block/unblock buttons, filters, and pagination), Blocklist
 (sortable/filterable list with add/delete forms and timed pause control),
 Cache (split into permanent local entries and upstream-cached entries),
-Config (server config, web-UI change summary, generate merged config), and
+Config (active upstream with selector, server config, web-UI change summary,
+generate merged config), and
 API (JSON-RPC reference documentation).
 
 Can bind to a TCP address or a UNIX domain socket. When using a socket,
@@ -125,6 +161,9 @@ clients can multiplex multiple DNS queries over a single connection.
 Server-side timeouts (`ReadHeaderTimeout` 10 s, `ReadTimeout`/`WriteTimeout`
 15 s, `IdleTimeout` 120 s) prevent hung connections while keeping keep-alive
 functional.
+
+DoH listeners are also bound synchronously; any that fail to bind are logged
+and skipped.
 
 `ProxyConfig.DohBind`, `DohCert`, `DohKey`, `DohPath` mirror the `-doh*`
 flags. Default path is `/dns-query`; default port (via `util.ParseAddr`) is
@@ -150,7 +189,9 @@ an SSE hook for the `/log` endpoint.
 4. Cache lookup -- return cached response with decremented TTLs if hit.
 5. Upstream resolution -- iterate resolver list in order; on success reset
    error counter and cache response; on first-resolver failure increment
-   counter and demote after 3 consecutive errors.
+   counter and demote it to the end of the list once the count exceeds
+   `UpstreamErrMax` (default 3). DoT/DoH upstream hostnames are resolved via
+   `Bootstrap` when a new connection is opened.
 6. DNS64 (if enabled) -- if AAAA query returned no answers, re-resolve as A
    and synthesise AAAA records using the configured prefix (default
    `64:ff9b::/96`). Applies to all clients regardless of address family.

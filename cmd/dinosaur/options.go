@@ -41,7 +41,7 @@ func GetUserConfig() (*config.UserConfig, error) {
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
 
 	var bootstrapFlag util.MultiFlag
-	flag.Var(&bootstrapFlag, "bootstrap", "Bootstrap resolver for DoT/DoH upstream hostnames [ip[:port]] (default: system resolver)")
+	flag.Var(&bootstrapFlag, "bootstrap", "Resolver for DoT/DoH upstream hostnames, used instead of the system resolver [ip[:port]] (default: system resolver)")
 
 	var bootstrapHostFlag util.MultiFlag
 	flag.Var(&bootstrapHostFlag, "bootstrap-host", "Fallback DoT/DoH upstream hostname mapping if bootstrap lookup fails (format: 'hostname=ip[,ip...]')")

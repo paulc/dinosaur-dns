@@ -11,7 +11,7 @@ import (
 // Version can be overridden at build time:
 //
 //	go build -ldflags "-X main.Version=x.y.z" ./cmd/dinosaur
-var Version = "1.1.0"
+var Version = "1.1.1"
 
 func main() {
 
