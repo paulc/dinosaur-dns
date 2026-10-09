@@ -15,7 +15,7 @@ import (
 	"github.com/paulc/dinosaur-dns/util"
 )
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// -- helpers -------------------------------------------------------------------
 
 func discardLog() *logger.Logger { return logger.New(logger.NewDiscard(true)) }
 
@@ -47,7 +47,7 @@ func dohEchoHandler(t *testing.T) http.Handler {
 	})
 }
 
-// ── UDP Resolver ──────────────────────────────────────────────────────────────
+// -- UDP Resolver --------------------------------------------------------------
 
 func TestUdpResolver(t *testing.T) {
 	r := NewUdpResolver("1.1.1.1:53")
@@ -94,7 +94,7 @@ func TestUdpResolverTimeout(t *testing.T) {
 	}
 }
 
-// ── DoT Resolver ──────────────────────────────────────────────────────────────
+// -- DoT Resolver --------------------------------------------------------------
 
 func TestDotResolver(t *testing.T) {
 	r := NewDotResolver("tls://1.1.1.1:853")
@@ -106,7 +106,7 @@ func TestDotResolver(t *testing.T) {
 	util.CheckResponse(t, q, out, "127.0.0.1")
 }
 
-// ── DoH Resolver ──────────────────────────────────────────────────────────────
+// -- DoH Resolver --------------------------------------------------------------
 
 func TestDohResolver(t *testing.T) {
 	r := NewDohResolver("https://cloudflare-dns.com/dns-query")
@@ -135,7 +135,7 @@ func TestDohResolverTimeout(t *testing.T) {
 		io.ReadAll(r.Body) // drain body so the client knows the server received it
 		select {
 		case <-r.Context().Done():
-		case <-time.After(time.Hour): // failsafe — never hit in normal operation
+		case <-time.After(time.Hour): // failsafe - never hit in normal operation
 		}
 	}))
 	defer srv.Close()

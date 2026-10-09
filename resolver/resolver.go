@@ -31,7 +31,7 @@ const (
 	dotPoolSize = 5
 )
 
-// ── UDP Resolver ──────────────────────────────────────────────────────────────
+// -- UDP Resolver --------------------------------------------------------------
 
 // UdpResolver sends plain UDP DNS queries. UDP is stateless so there is no
 // connection to pool, but the dns.Client is kept on the struct so its Timeout
@@ -58,7 +58,7 @@ func NewUdpResolver(upstream string) *UdpResolver {
 	}
 }
 
-// ── DoT Resolver ──────────────────────────────────────────────────────────────
+// -- DoT Resolver --------------------------------------------------------------
 
 type dotConn struct {
 	conn *dns.Conn
@@ -98,8 +98,8 @@ func (r *DotResolver) newConn() (*dotConn, error) {
 // isAlive reports whether an idle pooled connection is still open.
 //
 // It sets a 1 ms read deadline and attempts a single-byte read:
-//   - timeout error  → connection is alive and idle (nothing to read)
-//   - io.EOF / other → server has closed the connection
+//   - timeout error  -> connection is alive and idle (nothing to read)
+//   - io.EOF / other -> server has closed the connection
 //
 // The 1 ms deadline is short enough that no real DNS response will arrive
 // during the check, so the read is non-destructive on a healthy idle connection.
@@ -126,9 +126,9 @@ func (r *DotResolver) getConn() (*dotConn, error) {
 			if isAlive(c) {
 				return c, nil
 			}
-			c.conn.Close() // dead — discard and try next
+			c.conn.Close() // dead - discard and try next
 		default:
-			return r.newConn() // pool empty — dial fresh
+			return r.newConn() // pool empty - dial fresh
 		}
 	}
 }
@@ -146,7 +146,7 @@ func (r *DotResolver) putConn(c *dotConn) {
 // isTransientConnErr reports whether err is a connection-level error that
 // warrants a retry with a fresh connection. This covers the common case of
 // a server-side idle timeout: the remote sends TCP FIN, which Go surfaces as
-// io.EOF on the next read — not net.ErrClosed.
+// io.EOF on the next read - not net.ErrClosed.
 func isTransientConnErr(err error) bool {
 	return errors.Is(err, io.EOF) ||
 		errors.Is(err, io.ErrUnexpectedEOF) ||
@@ -159,7 +159,7 @@ func (r *DotResolver) Resolve(log *logger.Logger, q *dns.Msg) (out *dns.Msg, err
 		var c *dotConn
 		c, err = r.getConn()
 		if err != nil {
-			return // dial failed — no point retrying immediately
+			return // dial failed - no point retrying immediately
 		}
 		out, _, err = r.client.ExchangeWithConn(q, c.conn)
 		if err == nil {
@@ -168,7 +168,7 @@ func (r *DotResolver) Resolve(log *logger.Logger, q *dns.Msg) (out *dns.Msg, err
 		}
 		c.conn.Close() // always close on any exchange error
 		if !isTransientConnErr(err) {
-			return // non-transient (e.g. malformed response) — propagate immediately
+			return // non-transient (e.g. malformed response) - propagate immediately
 		}
 		log.Debugf("DoT transient error (attempt %d/%d): %s", attempt+1, maxAttempts, err)
 	}
@@ -215,11 +215,11 @@ func NewDotResolverWithBootstrap(upstream string, bootstrap *Bootstrap) *DotReso
 	}
 }
 
-// ── DoH Resolver ─────────────────────────────────────────────────────────────
+// -- DoH Resolver -------------------------------------------------------------
 
 // DohResolver sends DNS queries over HTTPS. A single *http.Client is kept on
-// the struct so its underlying http.Transport — which pools TCP connections and
-// caches TLS sessions — is shared across all calls, avoiding a new TLS
+// the struct so its underlying http.Transport - which pools TCP connections and
+// caches TLS sessions - is shared across all calls, avoiding a new TLS
 // handshake per query.
 type DohResolver struct {
 	Upstream string

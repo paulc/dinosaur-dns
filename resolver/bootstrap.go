@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+// -- Bootstrap ----------------------------------------------------------------
 
 // Bootstrap resolves the hostnames of DoT/DoH upstreams (e.g.
 // https://dns.google/dns-query) to IP addresses before dialing.

@@ -160,7 +160,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		logItem.Acl = true
 
-		// Check blocklist — read pointer and pause state under lock
+		// Check blocklist - read pointer and pause state under lock
 		config.RLock()
 		bl := config.BlockList
 		pauseUntil := config.BlockPauseUntil
@@ -184,7 +184,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// If we get an empty answer for a AAAA request and DNS64 is configured, synthesise from A records
 		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 {
-			// Try DNS64 lookup — use a copy so the original q (TypeAAAA) is preserved for error responses
+			// Try DNS64 lookup - use a copy so the original q (TypeAAAA) is preserved for error responses
 			q4 := q.Copy()
 			q4.Question[0].Qtype = dns.TypeA
 			dns64_out, err, cached := resolve(config, q4)

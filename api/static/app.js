@@ -18,7 +18,7 @@ async function checkBlockingStatus() {
         } else {
             endPauseWarning();
         }
-    } catch { /* ignore — server may not be reachable yet */ }
+    } catch { /* ignore - server may not be reachable yet */ }
 }
 
 function showPauseWarning() {
