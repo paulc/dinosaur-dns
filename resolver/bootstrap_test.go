@@ -80,3 +80,15 @@ func TestDohBootstrapHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBootstrapNoSystemResolver(t *testing.T) {
+	// With bootstrap resolvers configured the system resolver (including
+	// /etc/hosts) must not be used - localhost should only resolve via the
+	// static mappings
+	b := NewBootstrap([]string{"127.0.0.1:1"}, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if addrs, err := b.LookupHost(ctx, "localhost"); err == nil {
+		t.Errorf("Expected error (system resolver used?): %v", addrs)
+	}
+}
