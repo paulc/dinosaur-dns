@@ -22,6 +22,12 @@ const (
 	DefaultRefreshInterval = "24h"
 )
 
+// Default listen addresses and upstreams (used if none are configured)
+var (
+	DefaultListen   = []string{"lo0:8053"}
+	DefaultUpstream = []string{"tls://1.1.1.1:853", "tls://1.0.0.1:853"}
+)
+
 type ProxyConfig struct {
 	sync.RWMutex
 	ListenAddr     []string

@@ -202,3 +202,11 @@ an SSE hook for the `/log` endpoint.
 JSON config file < command-line flags. Both are optional. Flags that accept
 multiple values (`-listen`, `-upstream`, `-block`, etc.) accumulate; the
 JSON file values are read first, flags append to them.
+
+`loadConfigFile` (cmd/dinosaur) reads the config file; an empty file is an
+empty config. `-config-test <file>` loads the file in strict mode (unknown
+keys and trailing data are errors, JSON errors are reported as line:col),
+runs `GetProxyConfig` (and `doh.MakeTLSConfig` if DoH is enabled) to validate
+it, then prints `UserConfig.WithDefaults()` as JSON and exits without
+starting the server. `GetProxyConfig` returns errors rather than exiting so
+they can be reported this way.

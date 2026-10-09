@@ -3,7 +3,11 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/paulc/dinosaur-dns/config"
 
 	"golang.org/x/exp/slices"
 )
@@ -44,7 +48,7 @@ func TestGetUserConfig(t *testing.T) {
 		"-discard",
 	}
 
-	user_config, err := GetUserConfig()
+	user_config, _, err := GetUserConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,5 +83,53 @@ func TestGetUserConfig(t *testing.T) {
 
 		c, _ := json.MarshalIndent(user_config, "", "  ")
 		t.Errorf("Invalid config:\n--> %s\n%s", os.Args, string(c))
+	}
+}
+
+func TestLoadConfigFile(t *testing.T) {
+
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	// Empty / whitespace-only file is an empty config
+	for _, p := range []string{os.DevNull, write("empty.json", " \n\t\n")} {
+		uc := config.NewUserConfig()
+		if err := loadConfigFile(p, uc, true); err != nil {
+			t.Errorf("%s: %s", p, err)
+		}
+	}
+
+	// Valid file
+	uc := config.NewUserConfig()
+	if err := loadConfigFile(write("ok.json", `{"upstream":["1.1.1.1"]}`), uc, true); err != nil || uc.Upstream[0] != "1.1.1.1" {
+		t.Errorf("ok.json: %v %v", err, uc.Upstream)
+	}
+
+	// Unknown keys / trailing data are only errors in strict mode
+	for _, name := range []string{"unknown.json", "trailing.json"} {
+		content := map[string]string{"unknown.json": `{"upstreams":["1.1.1.1"]}`, "trailing.json": `{}{}`}[name]
+		p := write(name, content)
+		if err := loadConfigFile(p, config.NewUserConfig(), true); err == nil {
+			t.Errorf("%s: expected error (strict)", name)
+		}
+		if err := loadConfigFile(p, config.NewUserConfig(), false); err != nil {
+			t.Errorf("%s: unexpected error (non-strict): %s", name, err)
+		}
+	}
+
+	// Errors report line:col
+	err := loadConfigFile(write("syntax.json", "{\n  \"upstream\": [\"1.1.1.1\"],\n}\n"), config.NewUserConfig(), true)
+	if err == nil || !strings.Contains(err.Error(), "syntax.json:3:1:") {
+		t.Errorf("syntax.json: expected line:col in error: %v", err)
+	}
+	err = loadConfigFile(write("type.json", "{\n  \"api\": \"yes\"\n}"), config.NewUserConfig(), true)
+	if err == nil || !strings.Contains(err.Error(), "type.json:2:") {
+		t.Errorf("type.json: expected line:col in error: %v", err)
 	}
 }
