@@ -191,15 +191,18 @@ All flags can be specified in a JSON file:
 ```
 
 Command-line flags take precedence over the config file and are appended to
-any list-valued fields. An empty config file is treated as `{}`.
+any list-valued fields. An empty config file is treated as `{}`; unknown keys
+are errors.
 
 ### Checking a config file
 
 `-config-test <file>` checks a config file without starting the server. It
-parses the file (unknown keys and trailing data are errors), then validates
-it in the same way as at startup (blocklist and zone files/URLs are loaded,
-ACLs, durations and bootstrap entries are parsed, and DoH certificate/key
-files are loaded if a DoH listener is configured). Any other flags given are
+parses the file (as `-config` does, unknown keys and trailing data are
+errors), then validates it in the same way as at startup (blocklist and zone
+files/URLs are loaded, ACLs, durations and bootstrap entries are parsed, and
+DoH certificate/key files are loaded if a DoH listener is configured).
+`setuid` is not checked (it requires root, and the user/group may only exist
+on the target host) but is included in the output. Any other flags given are
 merged in as usual.
 
 On success the normalised config, with defaults filled in (as shown by
@@ -218,8 +221,7 @@ Use an empty file to print the default config:
 ./dinosaur -config-test /dev/null > dinosaur.json
 ```
 
-`-config-test` and `-config` can't be used together. Note that a config with
-`setuid` will fail the check unless run as root (as it would at startup).
+`-config-test` and `-config` can't be used together.
 
 ## API
 

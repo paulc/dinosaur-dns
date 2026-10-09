@@ -15,9 +15,9 @@ import (
 )
 
 // loadConfigFile reads a JSON config file (or URL) into user_config. An empty
-// (or whitespace-only) file is treated as an empty config. If strict is set
-// unknown keys and trailing data are errors.
-func loadConfigFile(path string, user_config *config.UserConfig, strict bool) error {
+// (or whitespace-only) file is treated as an empty config. Unknown keys and
+// trailing data are errors.
+func loadConfigFile(path string, user_config *config.UserConfig) error {
 	r, err := util.UrlOpen(path)
 	if err != nil {
 		return err
@@ -31,9 +31,7 @@ func loadConfigFile(path string, user_config *config.UserConfig, strict bool) er
 		return nil
 	}
 	dec := json.NewDecoder(bytes.NewReader(buf))
-	if strict {
-		dec.DisallowUnknownFields()
-	}
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(user_config); err != nil {
 		var offset int64 = -1
 		var syntaxErr *json.SyntaxError
@@ -50,7 +48,7 @@ func loadConfigFile(path string, user_config *config.UserConfig, strict bool) er
 		}
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	if strict && dec.More() {
+	if dec.More() {
 		return fmt.Errorf("%s: unexpected data after config object", path)
 	}
 	return nil
@@ -159,11 +157,11 @@ func GetUserConfig() (user_config *config.UserConfig, configTest bool, err error
 	}
 	if *configTestFlag != "" {
 		configTest = true
-		if err := loadConfigFile(*configTestFlag, user_config, true); err != nil {
+		if err := loadConfigFile(*configTestFlag, user_config); err != nil {
 			return nil, configTest, err
 		}
 	} else if *configFlag != "" {
-		if err := loadConfigFile(*configFlag, user_config, false); err != nil {
+		if err := loadConfigFile(*configFlag, user_config); err != nil {
 			return nil, configTest, err
 		}
 	}

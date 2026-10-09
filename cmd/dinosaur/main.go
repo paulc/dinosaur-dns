@@ -34,14 +34,17 @@ func main() {
 	}
 
 	proxy_config := config.NewProxyConfig()
-	if err := user_config.GetProxyConfig(proxy_config); err != nil {
-		if configTest {
-			configTestFail(err)
-		}
-		log.Fatal("Config Error: ", err)
-	}
 
 	if configTest {
+		// setuid isn't checked (it requires root and the user/group may only
+		// exist on the target host) but is kept in the output
+		setuid := user_config.Setuid
+		user_config.Setuid = ""
+		err := user_config.GetProxyConfig(proxy_config)
+		user_config.Setuid = setuid
+		if err != nil {
+			configTestFail(err)
+		}
 		// DoH TLS cert/key are only loaded when the DoH server starts
 		if len(proxy_config.DohBind) > 0 {
 			if _, err := doh.MakeTLSConfig(proxy_config.DohCert, proxy_config.DohKey); err != nil {
@@ -54,6 +57,10 @@ func main() {
 		}
 		fmt.Println(string(out))
 		os.Exit(0)
+	}
+
+	if err := user_config.GetProxyConfig(proxy_config); err != nil {
+		log.Fatal("Config Error: ", err)
 	}
 
 	proxy_config.Log.Printf("dinosaur-dns %s", Version)
