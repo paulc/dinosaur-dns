@@ -17,6 +17,7 @@ func GetUserConfig() (*config.UserConfig, error) {
 	// Command line flags
 
 	var helpFlag = flag.Bool("help", false, "Show usage")
+	var versionFlag = flag.Bool("version", false, "Show version")
 	var configFlag = flag.String("config", "", "JSON config file")
 	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
@@ -79,6 +80,11 @@ func GetUserConfig() (*config.UserConfig, error) {
 
 	if *helpFlag {
 		flag.Usage()
+		os.Exit(0)
+	}
+
+	if *versionFlag {
+		fmt.Printf("dinosaur-dns %s\n", Version)
 		os.Exit(0)
 	}
 

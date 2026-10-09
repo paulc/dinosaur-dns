@@ -383,4 +383,6 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Upstream resolver (default: tls://1.1.1.1:853 tls://1.0.0.1:853)
   -upstream-error-threshold int
         Consecutive upstream errors before switching to next upstream (default: 3)
+  -version
+        Show version
 ```
