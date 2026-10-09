@@ -67,8 +67,23 @@ func NewUserConfig() *UserConfig {
 }
 
 // WithDefaults returns a copy of the user config with unset options filled
-// in with their default values (used to generate a complete config file)
+// in with their default values and nil lists/maps replaced with empty ones
+// (so the config serialises without null values)
 func (user_config UserConfig) WithDefaults() UserConfig {
+	for _, v := range []*[]string{
+		&user_config.Listen, &user_config.Upstream, &user_config.Bootstrap,
+		&user_config.Acl, &user_config.Block, &user_config.BlockDelete,
+		&user_config.Blocklist, &user_config.BlocklistAAAA, &user_config.BlocklistFromHosts,
+		&user_config.LocalRR, &user_config.LocalRRPtr, &user_config.Localzone,
+		&user_config.Doh,
+	} {
+		if *v == nil {
+			*v = make([]string, 0)
+		}
+	}
+	if user_config.BootstrapHosts == nil {
+		user_config.BootstrapHosts = make(map[string][]string)
+	}
 	if user_config.UpstreamErrMax == 0 {
 		user_config.UpstreamErrMax = DefaultUpstreamErrMax
 	}

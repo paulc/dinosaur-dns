@@ -29,7 +29,7 @@ func NewApiService(c *config.ProxyConfig) *ApiService {
 type Empty struct{}
 
 func (s *ApiService) Config(r *http.Request, req *Empty, res *config.UserConfig) error {
-	*res = *s.config.UserConfig
+	*res = s.config.UserConfig.WithDefaults()
 	return nil
 }
 
