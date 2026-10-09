@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"testing"
+
+	"github.com/miekg/dns"
 )
 
 func TestBlockListAdd(t *testing.T) {
@@ -78,5 +80,36 @@ func TestBlockListList(t *testing.T) {
 
 	if len(list_res.Entries) != 2 {
 		t.Errorf("Expected 2 entries, got %d: %+v", len(list_res.Entries), list_res.Entries)
+	}
+}
+
+func TestBlockListRefreshReappliesChanges(t *testing.T) {
+
+	api, c := setupApiService(t)
+	c.UserConfig.Block = []string{"startup.com", "keep.com"}
+	if _, err := c.RefreshBlockList(); err != nil {
+		t.Fatal(err)
+	}
+	r := &http.Request{}
+
+	if err := api.BlockListAdd(r, &BlockListAddReq{[]string{"web.com", "web6.com:AAAA"}}, &Empty{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.BlockListDelete(r, &BlockListDeleteReq{"startup.com"}, &BlockListDeleteRes{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := c.RefreshBlockList(); err != nil {
+		t.Fatal(err)
+	}
+
+	bl := c.GetBlockList()
+	for name, expected := range map[string]bool{"web.com.": true, "keep.com.": true, "startup.com.": false} {
+		if bl.Match(name, dns.TypeA) != expected {
+			t.Errorf("%s: expected blocked=%v", name, expected)
+		}
+	}
+	if !bl.Match("web6.com.", dns.TypeAAAA) || bl.Match("web6.com.", dns.TypeA) {
+		t.Errorf("web6.com: expected AAAA-only block")
 	}
 }

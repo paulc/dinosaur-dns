@@ -37,8 +37,26 @@ interface) and uses `tls://1.1.1.1:853` and `tls://1.0.0.1:853`.
 | `tls://1.1.1.1:853` | DNS-over-TLS |
 | `https://cloudflare-dns.com/dns-query` | DNS-over-HTTPS |
 
-Multiple `-upstream` flags are tried in order. If the first upstream fails
-three consecutive times it is demoted to the end of the list.
+Multiple `-upstream` flags are tried in order. If the active (first) upstream
+fails more than `-upstream-error-threshold` consecutive times (default 3) it is
+demoted to the end of the list. The active upstream can also be changed from
+the Config tab of the web dashboard (or `api.SetUpstream`).
+
+### Bootstrapping DoT/DoH upstream hostnames
+
+DoT/DoH upstreams given by hostname (e.g. `https://dns.google/dns-query`) are
+resolved using the system resolver by default. If the system resolver points
+back at dinosaur (or is otherwise unavailable) you can specify bootstrap
+resolvers (IP only) and static fallback mappings, which are used if the
+bootstrap lookup fails (e.g. the network is down at startup):
+
+```
+./dinosaur -upstream https://dns.google/dns-query \
+           -bootstrap 9.9.9.9 -bootstrap 149.112.112.112:53 \
+           -bootstrap-host dns.google=8.8.8.8,8.8.4.4
+```
+
+TLS certificates are still verified against the upstream hostname.
 
 ## Listen address formats
 
@@ -48,7 +66,8 @@ three consecutive times it is demoted to the end of the list.
 | `lo0:8053` | all addresses on interface `lo0`, port 8053 |
 | `lo0` | all addresses on interface `lo0`, port 53 |
 
-Multiple `-listen` flags are accepted.
+Multiple `-listen` flags are accepted. Listen addresses which can't be bound
+(e.g. a missing interface) are logged and skipped rather than being fatal.
 
 ## Blocklist
 
@@ -89,6 +108,9 @@ Auto-refresh blocklists every 6 hours:
 ```
 ./dinosaur -blocklist /etc/dns/blocklist.txt -refresh -refresh-interval 6h
 ```
+
+Block rules added or deleted via the web UI/API are re-applied after each
+refresh.
 
 ## Local entries
 
@@ -142,6 +164,9 @@ All flags can be specified in a JSON file:
 {
   "listen":   ["127.0.0.1:53"],
   "upstream": ["tls://1.1.1.1:853", "tls://1.0.0.1:853"],
+  "upstream-error-threshold": 3,
+  "bootstrap": ["9.9.9.9"],
+  "bootstrap-hosts": {"dns.google": ["8.8.8.8", "8.8.4.4"]},
   "blocklist": ["/etc/dns/blocklist.txt"],
   "localrr":  ["host.local. 3600 IN A 192.168.1.10"],
   "acl":      ["192.168.1.0/24"],
@@ -191,6 +216,8 @@ JSON-RPC methods:
 | `api.BlockListAdd` | Add one or more block rules |
 | `api.BlockListDelete` | Remove a block rule |
 | `api.BlockListList` | List all block rules |
+| `api.GetUpstreams` | List upstreams and show the active one |
+| `api.SetUpstream` | Make a configured upstream active |
 | `api.GetBlockingStatus` | Check whether blocking is paused |
 | `api.PauseBlocking` | Pause all block rules for N seconds |
 | `api.ResumeBlocking` | Resume blocking immediately |
@@ -312,6 +339,10 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Blocklist file or URL (blocks AAAA only)
   -blocklist-from-hosts value
         Blocklist from /etc/hosts format file or URL
+  -bootstrap value
+        Bootstrap resolver for DoT/DoH upstream hostnames [ip[:port]] (default: system resolver)
+  -bootstrap-host value
+        Fallback DoT/DoH upstream hostname mapping if bootstrap lookup fails (format: 'hostname=ip[,ip...]')
   -config string
         JSON config file
   -debug
@@ -350,4 +381,8 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Log to syslog (default: false)
   -upstream value
         Upstream resolver (default: tls://1.1.1.1:853 tls://1.0.0.1:853)
+  -upstream-error-threshold int
+        Consecutive upstream errors before switching to next upstream (default: 3)
+  -version
+        Show version
 ```

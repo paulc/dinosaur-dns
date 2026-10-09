@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur-dns/blocklist"
 )
 
 var json_config = `
@@ -109,4 +112,56 @@ func TestUserConfig(t *testing.T) {
 			t.Errorf("Cache Not Found: %s", v)
 		}
 	}
+}
+
+func TestUpstreamOptions(t *testing.T) {
+	user_config := NewUserConfig()
+	user_config.Upstream = []string{"1.1.1.1", "8.8.8.8", "tls://one.one.one.one"}
+	user_config.UpstreamErrMax = 7
+	user_config.Bootstrap = []string{"9.9.9.9", "[2620:fe::fe]:53"}
+	user_config.BootstrapHosts = map[string][]string{"one.one.one.one": {"1.1.1.1", "1.0.0.1"}}
+	user_config.Discard = true
+	c := NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	testValue(t, "UpstreamErrMax", c.UpstreamErrMax, 7)
+
+	if err := c.SetActiveUpstream("tls://one.one.one.one:853"); err != nil {
+		t.Fatal(err)
+	}
+	testValue(t, "Active", strings.Join(c.GetUpstreams(), " "), "tls://one.one.one.one:853 1.1.1.1:53 8.8.8.8:53")
+	if err := c.SetActiveUpstream("1.2.3.4:53"); err == nil {
+		t.Errorf("Expected error for unknown upstream")
+	}
+
+	for _, bad := range []*UserConfig{
+		{Bootstrap: []string{"dns.google"}},
+		{BootstrapHosts: map[string][]string{"x": {"not-an-ip"}}},
+		{UpstreamErrMax: -1},
+	} {
+		bad.Discard = true
+		if err := bad.GetProxyConfig(NewProxyConfig()); err == nil {
+			t.Errorf("Expected error: %+v", bad)
+		}
+	}
+}
+
+func TestRefreshBlockListOverlay(t *testing.T) {
+	user_config := NewUserConfig()
+	user_config.Block = []string{"a.local", "b.local"}
+	user_config.Discard = true
+	c := NewProxyConfig()
+	if err := user_config.GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	c.BlockListOverlay = func(bl *blocklist.BlockList) {
+		bl.AddEntry("c.local", dns.TypeANY)
+	}
+	count, err := c.RefreshBlockList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	testValue(t, "Count", count, 3)
+	testValue(t, "Overlay", c.GetBlockList().Match("c.local.", dns.TypeA), true)
 }

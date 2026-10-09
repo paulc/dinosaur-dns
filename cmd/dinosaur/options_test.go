@@ -16,6 +16,9 @@ func TestGetUserConfig(t *testing.T) {
 		"-listen", "[::1]:8053",
 		"-upstream", "1.1.1.1",
 		"-upstream", "8.8.8.8",
+		"-upstream-error-threshold", "5",
+		"-bootstrap", "9.9.9.9",
+		"-bootstrap-host", "dns.google=8.8.8.8,8.8.4.4",
 		"-acl", "127.0.0.1/32",
 		"-acl", "::1/128",
 		"-block", "abcd.xyz",
@@ -48,6 +51,9 @@ func TestGetUserConfig(t *testing.T) {
 
 	if slices.Compare(user_config.Listen, []string{"127.0.0.1:8053", "[::1]:8053"}) != 0 ||
 		slices.Compare(user_config.Upstream, []string{"1.1.1.1", "8.8.8.8"}) != 0 ||
+		user_config.UpstreamErrMax != 5 ||
+		slices.Compare(user_config.Bootstrap, []string{"9.9.9.9"}) != 0 ||
+		slices.Compare(user_config.BootstrapHosts["dns.google"], []string{"8.8.8.8", "8.8.4.4"}) != 0 ||
 		slices.Compare(user_config.Acl, []string{"127.0.0.1/32", "::1/128"}) != 0 ||
 		slices.Compare(user_config.Block, []string{"abcd.xyz"}) != 0 ||
 		slices.Compare(user_config.BlockDelete, []string{"abcd.xyz"}) != 0 ||

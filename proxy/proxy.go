@@ -85,20 +85,20 @@ func resolve(config *config.ProxyConfig, q *dns.Msg) (out *dns.Msg, err error, c
 			return
 		}
 
-		// Upstream error - if this is the first upstream we count errors and try to switch if threshold exceeded
+		// Upstream error - if this is the active upstream we count errors and try to switch if threshold exceeded
+		// (skip if the upstream has been rotated concurrently or changed via the API)
 		if i == 0 {
 			config.Lock()
-			config.UpstreamErr++
-			if config.UpstreamErr > 3 {
-				// Demote upstream
-				config.Upstream = append(config.Upstream[1:], config.Upstream[0])
-				config.UpstreamErr = 0
-				demoted := config.Upstream
-				config.Unlock()
-				log.Printf("Error threshold exceeded - demoting upstream: %s", demoted)
-			} else {
-				config.Unlock()
+			if len(config.Upstream) > 0 && config.Upstream[0] == r {
+				config.UpstreamErr++
+				if config.UpstreamErr > config.UpstreamErrMax {
+					// Demote upstream
+					config.Upstream = append(config.Upstream[1:], config.Upstream[0])
+					config.UpstreamErr = 0
+					log.Printf("Error threshold exceeded - demoting upstream: %s", config.Upstream)
+				}
 			}
+			config.Unlock()
 		}
 		log.Debugf("Upstream error <%s>: %s", r, err)
 	}
@@ -160,7 +160,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		logItem.Acl = true
 
-		// Check blocklist — read pointer and pause state under lock
+		// Check blocklist - read pointer and pause state under lock
 		config.RLock()
 		bl := config.BlockList
 		pauseUntil := config.BlockPauseUntil
@@ -184,7 +184,7 @@ func MakeHandler(config *config.ProxyConfig) func(dns.ResponseWriter, *dns.Msg) 
 
 		// If we get an empty answer for a AAAA request and DNS64 is configured, synthesise from A records
 		if config.Dns64 && qtype == dns.TypeAAAA && len(out.Answer) == 0 {
-			// Try DNS64 lookup — use a copy so the original q (TypeAAAA) is preserved for error responses
+			// Try DNS64 lookup - use a copy so the original q (TypeAAAA) is preserved for error responses
 			q4 := q.Copy()
 			q4.Question[0].Qtype = dns.TypeA
 			dns64_out, err, cached := resolve(config, q4)

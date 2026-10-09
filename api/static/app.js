@@ -18,7 +18,7 @@ async function checkBlockingStatus() {
         } else {
             endPauseWarning();
         }
-    } catch { /* ignore — server may not be reachable yet */ }
+    } catch { /* ignore - server may not be reachable yet */ }
 }
 
 function showPauseWarning() {
@@ -114,7 +114,7 @@ function showTab(id) {
     document.getElementById('tab-' + id).hidden = false;
     document.querySelector(`nav button[data-tab="${id}"]`).classList.add('active');
     currentTab = id;
-    if (id === 'config')    { loadConfig(); loadChanges(); }
+    if (id === 'config')    { loadUpstreams(); loadConfig(); loadChanges(); }
     if (id === 'blocklist') loadBlocklist();
     if (id === 'cache')     loadCache();
     if (id === 'log')       scheduleLogRender();
@@ -137,6 +137,44 @@ async function loadConfig() {
         pre.textContent = JSON.stringify(result, null, 2);
     } catch (e) {
         pre.textContent = 'Error: ' + e.message;
+    }
+}
+
+async function loadUpstreams() {
+    try {
+        renderUpstreams(await rpcCall('api.GetUpstreams', {}));
+    } catch (e) {
+        setText('upstream-active', 'Error: ' + e.message);
+    }
+}
+
+function renderUpstreams(result) {
+    const upstreams = result.upstreams ?? [];
+    setText('upstream-active', result.active || '(none)');
+    setText('upstream-errors', `errors: ${result.error_count}/${result.error_threshold}`);
+    const sel = document.getElementById('upstream-select');
+    sel.replaceChildren(...upstreams.map(u => {
+        const opt = document.createElement('option');
+        opt.value = u;
+        opt.textContent = u === result.active ? `${u} (active)` : u;
+        opt.selected = u === result.active;
+        return opt;
+    }));
+}
+
+async function setUpstream() {
+    const btn = document.getElementById('upstream-set-btn');
+    const msg = document.getElementById('upstream-msg');
+    const upstream = document.getElementById('upstream-select').value;
+    if (!upstream) return;
+    btn.disabled = true;
+    try {
+        renderUpstreams(await rpcCall('api.SetUpstream', { upstream }));
+        showMsg(msg, 'Active upstream set', false);
+    } catch (e) {
+        showMsg(msg, 'Error: ' + e.message, true);
+    } finally {
+        btn.disabled = false;
     }
 }
 
@@ -593,6 +631,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cache-add').addEventListener('keydown', e => {
         if (e.key === 'Enter') addCacheEntry(false);
     });
+
+    document.getElementById('upstream-set-btn').addEventListener('click', setUpstream);
+    document.getElementById('upstream-refresh-btn').addEventListener('click', loadUpstreams);
 
     document.getElementById('merge-config-btn').addEventListener('click', async () => {
         const btn = document.getElementById('merge-config-btn');

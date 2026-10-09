@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/miekg/dns"
+	"github.com/paulc/dinosaur-dns/blocklist"
 )
 
 type changeLog struct {
@@ -110,6 +111,19 @@ func (c *changeLog) removeRR(name, qtype string) {
 	} else {
 		// entry came from startup config -- record as a net deletion
 		c.localRRDeletes[key] = struct{}{}
+	}
+}
+
+// applyBlockChanges re-applies the net web blocklist changes to bl (used
+// when the blocklist is refreshed from the startup config)
+func (c *changeLog) applyBlockChanges(bl *blocklist.BlockList) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for key := range c.blocks {
+		bl.AddEntry(key, dns.TypeANY)
+	}
+	for key := range c.blockDeletes {
+		bl.DeleteEntry(key, dns.TypeANY)
 	}
 }
 

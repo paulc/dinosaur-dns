@@ -17,37 +17,42 @@ import (
 )
 
 type UserConfig struct {
-	Listen             []string `json:"listen"`
-	Upstream           []string `json:"upstream"`
-	Acl                []string `json:"acl"`
-	Block              []string `json:"block"`
-	BlockDelete        []string `json:"block-delete"`
-	Blocklist          []string `json:"blocklist"`
-	BlocklistAAAA      []string `json:"blocklist-aaaa"`
-	BlocklistFromHosts []string `json:"blocklist-from-hosts"`
-	LocalRR            []string `json:"localrr"`
-	LocalRRPtr         []string `json:"localrr-ptr"`
-	Localzone          []string `json:"localzone"`
-	Dns64              bool     `json:"dns64"`
-	Dns64Prefix        string   `json:"dns64-prefix"`
-	Api                bool     `json:"api"`
-	ApiBind            string   `json:"api-bind"`
-	Doh                []string `json:"doh"`
-	DohCert            string   `json:"doh-cert"`
-	DohKey             string   `json:"doh-key"`
-	DohPath            string   `json:"doh-path"`
-	Refresh            bool     `json:"refresh"`
-	RefreshInterval    string   `json:"refresh-interval"`
-	Debug              bool     `json:"debug"`
-	Syslog             bool     `json:"syslog"`
-	Discard            bool     `json:"discard"`
-	Setuid             string   `json:"setuid"`
+	Listen             []string            `json:"listen"`
+	Upstream           []string            `json:"upstream"`
+	UpstreamErrMax     int                 `json:"upstream-error-threshold"`
+	Bootstrap          []string            `json:"bootstrap"`
+	BootstrapHosts     map[string][]string `json:"bootstrap-hosts"`
+	Acl                []string            `json:"acl"`
+	Block              []string            `json:"block"`
+	BlockDelete        []string            `json:"block-delete"`
+	Blocklist          []string            `json:"blocklist"`
+	BlocklistAAAA      []string            `json:"blocklist-aaaa"`
+	BlocklistFromHosts []string            `json:"blocklist-from-hosts"`
+	LocalRR            []string            `json:"localrr"`
+	LocalRRPtr         []string            `json:"localrr-ptr"`
+	Localzone          []string            `json:"localzone"`
+	Dns64              bool                `json:"dns64"`
+	Dns64Prefix        string              `json:"dns64-prefix"`
+	Api                bool                `json:"api"`
+	ApiBind            string              `json:"api-bind"`
+	Doh                []string            `json:"doh"`
+	DohCert            string              `json:"doh-cert"`
+	DohKey             string              `json:"doh-key"`
+	DohPath            string              `json:"doh-path"`
+	Refresh            bool                `json:"refresh"`
+	RefreshInterval    string              `json:"refresh-interval"`
+	Debug              bool                `json:"debug"`
+	Syslog             bool                `json:"syslog"`
+	Discard            bool                `json:"discard"`
+	Setuid             string              `json:"setuid"`
 }
 
 func NewUserConfig() *UserConfig {
 	return &UserConfig{
 		Listen:             make([]string, 0),
 		Upstream:           make([]string, 0),
+		Bootstrap:          make([]string, 0),
+		BootstrapHosts:     make(map[string][]string),
 		Acl:                make([]string, 0),
 		Block:              make([]string, 0),
 		BlockDelete:        make([]string, 0),
@@ -55,8 +60,46 @@ func NewUserConfig() *UserConfig {
 		BlocklistAAAA:      make([]string, 0),
 		BlocklistFromHosts: make([]string, 0),
 		LocalRR:            make([]string, 0),
+		LocalRRPtr:         make([]string, 0),
 		Localzone:          make([]string, 0),
+		Doh:                make([]string, 0),
 	}
+}
+
+// WithDefaults returns a copy of the user config with unset options filled
+// in with their default values and nil lists/maps replaced with empty ones
+// (so the config serialises without null values)
+func (user_config UserConfig) WithDefaults() UserConfig {
+	for _, v := range []*[]string{
+		&user_config.Listen, &user_config.Upstream, &user_config.Bootstrap,
+		&user_config.Acl, &user_config.Block, &user_config.BlockDelete,
+		&user_config.Blocklist, &user_config.BlocklistAAAA, &user_config.BlocklistFromHosts,
+		&user_config.LocalRR, &user_config.LocalRRPtr, &user_config.Localzone,
+		&user_config.Doh,
+	} {
+		if *v == nil {
+			*v = make([]string, 0)
+		}
+	}
+	if user_config.BootstrapHosts == nil {
+		user_config.BootstrapHosts = make(map[string][]string)
+	}
+	if user_config.UpstreamErrMax == 0 {
+		user_config.UpstreamErrMax = DefaultUpstreamErrMax
+	}
+	if user_config.ApiBind == "" {
+		user_config.ApiBind = DefaultApiBind
+	}
+	if user_config.Dns64Prefix == "" {
+		user_config.Dns64Prefix = DefaultDns64Prefix
+	}
+	if user_config.DohPath == "" {
+		user_config.DohPath = DefaultDohPath
+	}
+	if user_config.RefreshInterval == "" {
+		user_config.RefreshInterval = DefaultRefreshInterval
+	}
+	return user_config
 }
 
 // Generate config from user options
@@ -73,22 +116,36 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 		}
 	}
 
+	// Bootstrap resolver for DoT/DoH upstream hostnames
+	bootstrap, err := user_config.GetBootstrap()
+	if err != nil {
+		return err
+	}
+
 	// Upstream resolvers
 	for _, v := range user_config.Upstream {
 		switch {
 		case strings.HasPrefix(v, "https://"):
-			config.Upstream = append(config.Upstream, resolver.NewDohResolver(v))
+			config.Upstream = append(config.Upstream, resolver.NewDohResolverWithBootstrap(v, bootstrap))
 		case strings.HasPrefix(v, "tls://"):
 			if !regexp.MustCompile(`:\d+$`).MatchString(v) {
 				v += ":853"
 			}
-			config.Upstream = append(config.Upstream, resolver.NewDotResolver(v))
+			config.Upstream = append(config.Upstream, resolver.NewDotResolverWithBootstrap(v, bootstrap))
 		default:
 			if !regexp.MustCompile(`:\d+$`).MatchString(v) {
 				v += ":53"
 			}
 			config.Upstream = append(config.Upstream, resolver.NewUdpResolver(v))
 		}
+	}
+
+	// Upstream error threshold (0 = use default)
+	if user_config.UpstreamErrMax < 0 {
+		return fmt.Errorf("Invalid upstream-error-threshold: %d", user_config.UpstreamErrMax)
+	}
+	if user_config.UpstreamErrMax > 0 {
+		config.UpstreamErrMax = user_config.UpstreamErrMax
 	}
 
 	// Generate blocklist
@@ -210,6 +267,36 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	// Add reference to UserConfig
 	config.UserConfig = user_config
 	return nil
+}
+
+// GetBootstrap builds the bootstrap resolver used to look up DoT/DoH upstream
+// hostnames. Bootstrap resolvers are ip[:port] (default port 53); if none are
+// given the system resolver is used. BootstrapHosts are static hostname -> IP
+// mappings used if the lookup fails.
+func (user_config *UserConfig) GetBootstrap() (*resolver.Bootstrap, error) {
+	resolvers := make([]string, 0, len(user_config.Bootstrap))
+	for _, v := range user_config.Bootstrap {
+		addr := v
+		if ip := net.ParseIP(strings.Trim(v, "[]")); ip != nil {
+			addr = net.JoinHostPort(ip.String(), "53")
+		}
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || net.ParseIP(host) == nil {
+			return nil, fmt.Errorf("Invalid bootstrap resolver (must be ip[:port]): %s", v)
+		}
+		resolvers = append(resolvers, addr)
+	}
+	hosts := make(map[string][]net.IP, len(user_config.BootstrapHosts))
+	for name, addrs := range user_config.BootstrapHosts {
+		for _, a := range addrs {
+			ip := net.ParseIP(a)
+			if ip == nil {
+				return nil, fmt.Errorf("Invalid bootstrap-hosts address for %s: %s", name, a)
+			}
+			hosts[name] = append(hosts[name], ip)
+		}
+	}
+	return resolver.NewBootstrap(resolvers, hosts), nil
 }
 
 func (user_config *UserConfig) UpdateBlockList(bl *blocklist.BlockList) error {

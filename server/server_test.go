@@ -181,3 +181,28 @@ func TestCacheFlush(t *testing.T) {
 		cancelCtx()
 	}
 }
+
+func TestServerMissingInterface(t *testing.T) {
+
+	// A listen address which can't be bound should be logged and skipped
+	proxy_config := config.NewProxyConfig()
+	proxy_config.ListenAddr = []string{"no-such-interface0:8054", "127.0.0.1:8054"}
+	proxy_config.Upstream = []resolver.Resolver{resolver.NewUdpResolver("127.0.0.1:1")}
+	proxy_config.Log = logger.New(logger.NewDiscard(false))
+	proxy_config.Cache.AddRRString("bound.local. 60 IN A 127.0.0.1", true, false)
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	ready := make(chan bool)
+
+	go StartServer(ctx, proxy_config, ready)
+	<-ready
+
+	q := util.CreateQuery("bound.local", "A")
+	c := &dns.Client{}
+	in, _, err := c.Exchange(q, "127.0.0.1:8054")
+	if err != nil {
+		t.Fatal(err)
+	}
+	util.CheckResponse(t, q, in, "127.0.0.1")
+}

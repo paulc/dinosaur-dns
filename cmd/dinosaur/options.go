@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/paulc/dinosaur-dns/config"
 	"github.com/paulc/dinosaur-dns/util"
@@ -15,6 +17,7 @@ func GetUserConfig() (*config.UserConfig, error) {
 	// Command line flags
 
 	var helpFlag = flag.Bool("help", false, "Show usage")
+	var versionFlag = flag.Bool("version", false, "Show version")
 	var configFlag = flag.String("config", "", "JSON config file")
 	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
@@ -29,12 +32,19 @@ func GetUserConfig() (*config.UserConfig, error) {
 	var syslogFlag = flag.Bool("syslog", false, "Use syslog (default: false)")
 	var discardFlag = flag.Bool("discard", false, "Discard log (default: false)")
 	var setuidFlag = flag.String("setuid", "", "Setuid/Setgid user[:group] (default: none)")
+	var upstreamErrFlag = flag.Int("upstream-error-threshold", 0, "Consecutive upstream errors before switching to next upstream (default: 3)")
 
 	var listenFlag util.MultiFlag
 	flag.Var(&listenFlag, "listen", "Listen address/interface (default: lo0:8053)")
 
 	var upstreamFlag util.MultiFlag
 	flag.Var(&upstreamFlag, "upstream", "Upstream resolver [host:port or https://...] (default: 1.1.1.1:53,1.0.0.1:53)")
+
+	var bootstrapFlag util.MultiFlag
+	flag.Var(&bootstrapFlag, "bootstrap", "Bootstrap resolver for DoT/DoH upstream hostnames [ip[:port]] (default: system resolver)")
+
+	var bootstrapHostFlag util.MultiFlag
+	flag.Var(&bootstrapHostFlag, "bootstrap-host", "Fallback DoT/DoH upstream hostname mapping if bootstrap lookup fails (format: 'hostname=ip[,ip...]')")
 
 	var blockFlag util.MultiFlag
 	flag.Var(&blockFlag, "block", "Block entry (format: 'domain[:qtype]')")
@@ -73,6 +83,11 @@ func GetUserConfig() (*config.UserConfig, error) {
 		os.Exit(0)
 	}
 
+	if *versionFlag {
+		fmt.Printf("dinosaur-dns %s\n", Version)
+		os.Exit(0)
+	}
+
 	user_config := config.NewUserConfig()
 
 	// Get JSON config file first
@@ -101,6 +116,28 @@ func GetUserConfig() (*config.UserConfig, error) {
 	// Upstream resolvers
 	for _, v := range upstreamFlag {
 		user_config.Upstream = append(user_config.Upstream, v)
+	}
+
+	// Upstream error threshold
+	if *upstreamErrFlag != 0 {
+		user_config.UpstreamErrMax = *upstreamErrFlag
+	}
+
+	// Bootstrap resolvers
+	for _, v := range bootstrapFlag {
+		user_config.Bootstrap = append(user_config.Bootstrap, v)
+	}
+
+	// Bootstrap host mappings
+	for _, v := range bootstrapHostFlag {
+		name, addrs, ok := strings.Cut(v, "=")
+		if !ok || name == "" || addrs == "" {
+			return nil, fmt.Errorf("Invalid -bootstrap-host (format: 'hostname=ip[,ip...]'): %s", v)
+		}
+		if user_config.BootstrapHosts == nil {
+			user_config.BootstrapHosts = make(map[string][]string)
+		}
+		user_config.BootstrapHosts[name] = append(user_config.BootstrapHosts[name], strings.Split(addrs, ",")...)
 	}
 
 	// Local cache entries

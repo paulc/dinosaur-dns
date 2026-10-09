@@ -16,7 +16,12 @@ type ApiService struct {
 }
 
 func NewApiService(c *config.ProxyConfig) *ApiService {
-	return &ApiService{config: c, changelog: newChangeLog()}
+	s := &ApiService{config: c, changelog: newChangeLog()}
+	// Re-apply web blocklist changes when the blocklist is refreshed
+	c.Lock()
+	c.BlockListOverlay = s.changelog.applyBlockChanges
+	c.Unlock()
+	return s
 }
 
 // Get config
@@ -24,7 +29,7 @@ func NewApiService(c *config.ProxyConfig) *ApiService {
 type Empty struct{}
 
 func (s *ApiService) Config(r *http.Request, req *Empty, res *config.UserConfig) error {
-	*res = *s.config.UserConfig
+	*res = s.config.UserConfig.WithDefaults()
 	return nil
 }
 
@@ -78,7 +83,7 @@ type BlockListCountRes struct {
 }
 
 func (s *ApiService) BlockListCount(r *http.Request, req *Empty, res *BlockListCountRes) error {
-	res.Count = s.config.BlockList.Count()
+	res.Count = s.config.GetBlockList().Count()
 	return nil
 }
 
@@ -87,6 +92,10 @@ type BlockListAddReq struct {
 }
 
 func (s *ApiService) BlockListAdd(r *http.Request, req *BlockListAddReq, res *Empty) error {
+	// Hold read lock so a concurrent refresh can't swap the blocklist between
+	// updating it and recording the change
+	s.config.RLock()
+	defer s.config.RUnlock()
 	for _, v := range req.Entries {
 		if err := s.config.BlockList.AddEntry(v, dns.TypeANY); err != nil {
 			return err
@@ -104,6 +113,8 @@ type BlockListDeleteRes struct {
 }
 
 func (s *ApiService) BlockListDelete(r *http.Request, req *BlockListDeleteReq, res *BlockListDeleteRes) error {
+	s.config.RLock()
+	defer s.config.RUnlock()
 	var err error
 	res.Found, err = s.config.BlockList.DeleteEntry(req.Name, dns.TypeANY)
 	if err != nil {
@@ -120,8 +131,42 @@ type BlockListListRes struct {
 }
 
 func (s *ApiService) BlockListList(r *http.Request, req *Empty, res *BlockListListRes) error {
-	res.Entries = s.config.BlockList.Dump()
+	res.Entries = s.config.GetBlockList().Dump()
 	return nil
+}
+
+// Upstreams
+
+type UpstreamsRes struct {
+	Upstreams []string `json:"upstreams"` // in current order (first is active)
+	Active    string   `json:"active"`
+	ErrCount  int      `json:"error_count"`
+	ErrMax    int      `json:"error_threshold"`
+}
+
+type SetUpstreamReq struct {
+	Upstream string `json:"upstream"`
+}
+
+func (s *ApiService) GetUpstreams(r *http.Request, req *Empty, res *UpstreamsRes) error {
+	res.Upstreams = s.config.GetUpstreams()
+	if len(res.Upstreams) > 0 {
+		res.Active = res.Upstreams[0]
+	}
+	s.config.RLock()
+	res.ErrCount = s.config.UpstreamErr
+	res.ErrMax = s.config.UpstreamErrMax
+	s.config.RUnlock()
+	return nil
+}
+
+// SetUpstream makes one of the configured upstreams active
+func (s *ApiService) SetUpstream(r *http.Request, req *SetUpstreamReq, res *UpstreamsRes) error {
+	if err := s.config.SetActiveUpstream(req.Upstream); err != nil {
+		return err
+	}
+	s.config.Log.Printf("Upstream set via API: %s", req.Upstream)
+	return s.GetUpstreams(r, &Empty{}, res)
 }
 
 // Block pause
@@ -177,7 +222,7 @@ type MergedConfigRes struct {
 
 func (s *ApiService) GetMergedConfig(r *http.Request, req *Empty, res *MergedConfigRes) error {
 	cl := s.changelog.snapshot()
-	uc := *s.config.UserConfig
+	uc := s.config.UserConfig.WithDefaults()
 
 	// Remove block-deletes from the direct block list where present.
 	// Track which ones were found there vs which came from blocklist files.
