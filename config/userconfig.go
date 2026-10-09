@@ -60,8 +60,31 @@ func NewUserConfig() *UserConfig {
 		BlocklistAAAA:      make([]string, 0),
 		BlocklistFromHosts: make([]string, 0),
 		LocalRR:            make([]string, 0),
+		LocalRRPtr:         make([]string, 0),
 		Localzone:          make([]string, 0),
+		Doh:                make([]string, 0),
 	}
+}
+
+// WithDefaults returns a copy of the user config with unset options filled
+// in with their default values (used to generate a complete config file)
+func (user_config UserConfig) WithDefaults() UserConfig {
+	if user_config.UpstreamErrMax == 0 {
+		user_config.UpstreamErrMax = DefaultUpstreamErrMax
+	}
+	if user_config.ApiBind == "" {
+		user_config.ApiBind = DefaultApiBind
+	}
+	if user_config.Dns64Prefix == "" {
+		user_config.Dns64Prefix = DefaultDns64Prefix
+	}
+	if user_config.DohPath == "" {
+		user_config.DohPath = DefaultDohPath
+	}
+	if user_config.RefreshInterval == "" {
+		user_config.RefreshInterval = DefaultRefreshInterval
+	}
+	return user_config
 }
 
 // Generate config from user options

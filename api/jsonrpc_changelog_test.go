@@ -1,8 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/paulc/dinosaur-dns/config"
 )
 
 func TestGetChanges(t *testing.T) {
@@ -107,5 +110,34 @@ func TestGetMergedConfig(t *testing.T) {
 	}
 	if res.Config == "" {
 		t.Error("Expected non-empty merged config")
+	}
+}
+
+func TestMergedConfigDefaults(t *testing.T) {
+
+	api, _ := setupApiService(t)
+	res := &MergedConfigRes{}
+	if err := api.GetMergedConfig(&http.Request{}, &Empty{}, res); err != nil {
+		t.Fatal(err)
+	}
+	uc := map[string]any{}
+	if err := json.Unmarshal([]byte(res.Config), &uc); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{
+		"upstream-error-threshold": float64(config.DefaultUpstreamErrMax),
+		"api-bind":                 config.DefaultApiBind,
+		"dns64-prefix":             config.DefaultDns64Prefix,
+		"doh-path":                 config.DefaultDohPath,
+		"refresh-interval":         config.DefaultRefreshInterval,
+	} {
+		if uc[k] != v {
+			t.Errorf("%s: expected %v, got %v", k, v, uc[k])
+		}
+	}
+	for k, v := range uc {
+		if v == nil {
+			t.Errorf("%s: null", k)
+		}
 	}
 }

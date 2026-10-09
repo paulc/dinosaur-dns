@@ -222,7 +222,7 @@ type MergedConfigRes struct {
 
 func (s *ApiService) GetMergedConfig(r *http.Request, req *Empty, res *MergedConfigRes) error {
 	cl := s.changelog.snapshot()
-	uc := *s.config.UserConfig
+	uc := s.config.UserConfig.WithDefaults()
 
 	// Remove block-deletes from the direct block list where present.
 	// Track which ones were found there vs which came from blocklist files.

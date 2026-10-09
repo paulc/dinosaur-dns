@@ -13,6 +13,15 @@ import (
 	"github.com/paulc/dinosaur-dns/statshandler"
 )
 
+// Defaults for options which aren't set in the user config
+const (
+	DefaultUpstreamErrMax  = 3
+	DefaultApiBind         = "127.0.0.1:8553"
+	DefaultDns64Prefix     = "64:ff9b::/96"
+	DefaultDohPath         = "/dns-query"
+	DefaultRefreshInterval = "24h"
+)
+
 type ProxyConfig struct {
 	sync.RWMutex
 	ListenAddr     []string
@@ -47,21 +56,23 @@ type ProxyConfig struct {
 }
 
 func NewProxyConfig() *ProxyConfig {
+	_, dns64Prefix, _ := net.ParseCIDR(DefaultDns64Prefix)
+	refreshInterval, _ := time.ParseDuration(DefaultRefreshInterval)
 	return &ProxyConfig{
 		ListenAddr:      make([]string, 0),
 		Upstream:        make([]resolver.Resolver, 0),
-		UpstreamErrMax:  3,
+		UpstreamErrMax:  DefaultUpstreamErrMax,
 		Acl:             make([]net.IPNet, 0),
 		Cache:           cache.New(),
 		CacheFlush:      30 * time.Second,
 		BlockList:       blocklist.New(),
-		Dns64Prefix:     net.IPNet{IP: net.ParseIP("64:ff9b::"), Mask: net.CIDRMask(96, 128)},
-		ApiBind:         "127.0.0.1:8553",
+		Dns64Prefix:     *dns64Prefix,
+		ApiBind:         DefaultApiBind,
 		DohBind:         make([]string, 0),
-		DohPath:         "/dns-query",
+		DohPath:         DefaultDohPath,
 		StatsHandler:    statshandler.New(1000),
 		Log:             logger.New(logger.NewStderr(false)),
-		RefreshInterval: time.Hour * 24,
+		RefreshInterval: refreshInterval,
 	}
 }
 
