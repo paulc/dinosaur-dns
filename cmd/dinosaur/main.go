@@ -14,7 +14,7 @@ import (
 // Version can be overridden at build time:
 //
 //	go build -ldflags "-X main.Version=x.y.z" ./cmd/dinosaur
-var Version = "1.3.0"
+var Version = "1.3.1"
 
 // configTestFail reports a -config-test error and exits
 func configTestFail(err error) {
