@@ -148,25 +148,49 @@ func (c *ProxyConfig) SetActiveUpstream(name string) error {
 }
 
 // GetTLSConfig returns the TLS config shared by the DoH server and the HTTPS
-// API, loaded from SslCert/SslKey (or a self-signed certificate if unset). It
-// is built once so both servers present the same certificate.
+// API, loaded from SslCert/SslKey (or a self-signed certificate for the API
+// and DoH bind hosts if unset). It is built once so both servers present the
+// same certificate.
 func (c *ProxyConfig) GetTLSConfig() (*tls.Config, error) {
 	c.tlsOnce.Do(func() {
-		c.tlsConfig, c.tlsErr = util.MakeTLSConfig(c.SslCert, c.SslKey)
+		c.tlsConfig, c.tlsErr = util.MakeTLSConfig(c.SslCert, c.SslKey, c.tlsHosts())
 	})
 	return c.tlsConfig, c.tlsErr
 }
 
+// tlsHosts returns the hosts the TLS servers are bound to (https API and DoH)
+func (c *ProxyConfig) tlsHosts() (hosts []string) {
+	if scheme, addr, err := ParseApiBind(c.ApiBind); err == nil && scheme == "https" {
+		if host, _, err := net.SplitHostPort(addr); err == nil {
+			hosts = append(hosts, host)
+		}
+	}
+	for _, v := range c.DohBind {
+		if host, _, err := net.SplitHostPort(v); err == nil {
+			hosts = append(hosts, host)
+		}
+	}
+	return
+}
+
 // ParseApiBind parses an api-bind value - either a URL (http://host[:port][/]
-// or https://host[:port][/], default port 8553) or an absolute UNIX socket
-// path (plain HTTP) - and returns the scheme and listen address.
+// or https://host[:port][/], default port 8553), host[:port] (plain HTTP) or
+// an absolute UNIX socket path (plain HTTP) - and returns the scheme and
+// listen address.
 func ParseApiBind(bind string) (scheme, addr string, err error) {
 	if strings.HasPrefix(bind, "/") {
 		return "http", bind, nil
 	}
 	u, err := url.Parse(bind)
+	if !strings.Contains(bind, "://") {
+		u, err = url.Parse("http://" + bind)
+	}
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return "", "", fmt.Errorf("Invalid api-bind (%s): must be http://host:port, https://host:port or a UNIX socket path", bind)
+		return "", "", fmt.Errorf("Invalid api-bind (%s): must be [http://]host:port, https://host:port or a UNIX socket path", bind)
+	}
+	// Unbracketed IPv6 (e.g. ::1:8553) is ambiguous
+	if strings.Contains(u.Hostname(), ":") && !strings.HasPrefix(u.Host, "[") {
+		return "", "", fmt.Errorf("Invalid api-bind (%s): IPv6 addresses must be in brackets ([::1]:port)", bind)
 	}
 	if u.Host == "" || u.Hostname() == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
 		return "", "", fmt.Errorf("Invalid api-bind (%s): expected %s://host[:port]", bind, u.Scheme)

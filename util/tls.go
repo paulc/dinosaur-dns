@@ -9,20 +9,23 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
+	"slices"
+	"strings"
 	"time"
 )
 
 // MakeTLSConfig returns a TLS configuration using the supplied cert/key files.
 // If both paths are empty a fresh self-signed ECDSA-P256 certificate is
-// generated in memory.
-func MakeTLSConfig(certFile, keyFile string) (*tls.Config, error) {
+// generated in memory for hosts (see GenerateSelfSigned).
+func MakeTLSConfig(certFile, keyFile string, hosts []string) (*tls.Config, error) {
 	var cert tls.Certificate
 	var err error
 
 	if certFile != "" && keyFile != "" {
 		cert, err = tls.LoadX509KeyPair(certFile, keyFile)
 	} else {
-		cert, err = GenerateSelfSigned()
+		cert, err = GenerateSelfSigned(hosts)
 	}
 	if err != nil {
 		return nil, err
@@ -37,7 +40,9 @@ func MakeTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 }
 
 // GenerateSelfSigned returns an in-memory self-signed ECDSA-P256 certificate
-func GenerateSelfSigned() (tls.Certificate, error) {
+// with hosts (IP addresses or hostnames) as subject alternative names.
+// Unspecified addresses (0.0.0.0, ::) are skipped and IPv6 zones removed.
+func GenerateSelfSigned(hosts []string) (tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err
@@ -55,6 +60,16 @@ func GenerateSelfSigned() (tls.Certificate, error) {
 		NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	for _, h := range hosts {
+		h, _, _ = strings.Cut(h, "%")
+		if ip := net.ParseIP(h); ip != nil {
+			if !ip.IsUnspecified() && !slices.ContainsFunc(tmpl.IPAddresses, ip.Equal) {
+				tmpl.IPAddresses = append(tmpl.IPAddresses, ip)
+			}
+		} else if h != "" && !slices.Contains(tmpl.DNSNames, h) {
+			tmpl.DNSNames = append(tmpl.DNSNames, h)
+		}
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)

@@ -148,8 +148,8 @@ generate merged config), and
 API (JSON-RPC reference documentation).
 
 `ProxyConfig.ApiBind` is a URL (`http://host[:port]` / `https://host[:port]`,
-default port 8553) or an absolute UNIX domain socket path (always plain
-HTTP); `config.ParseApiBind` splits it into scheme and listen address and is
+default port 8553), a bare `host[:port]` (treated as `http://`) or an
+absolute UNIX domain socket path (always plain HTTP); `config.ParseApiBind` splits it into scheme and listen address and is
 used both to validate the config and by `MakeApiHandler`. When using a socket,
 a signal handler removes the socket file before re-raising the signal so
 context-based shutdown proceeds normally. For `https://` the server uses the
@@ -165,7 +165,8 @@ against each configured entry in constant time and returns `401` with a
 dashboard uses relative URLs (`/api`, `/log`) so it works unchanged over
 HTTP or HTTPS, and same-origin `fetch`/`EventSource` requests reuse the
 browser's cached basic auth credentials. `Config` and `GetMergedConfig`
-mask api-auth passwords (`redactConfig`).
+return api-auth passwords in full (so the merged config is usable as a
+config file), so any API user can read every credential.
 
 **doh** -- optional HTTPS server (RFC 8484) for downstream DoH clients.
 `MakeDoHHandler` accepts GET (`?dns=<base64url>`) and POST
@@ -178,7 +179,10 @@ TLS is configured via `ProxyConfig.GetTLSConfig`, which calls
 `util.MakeTLSConfig` once (`sync.Once`) with `SslCert`/`SslKey` so the DoH
 server and the HTTPS API share one config and certificate. When cert/key
 files are absent a self-signed ECDSA-P256 certificate is generated in memory
-at startup; setting only one of `ssl-cert`/`ssl-key` is a config error.
+at startup, with the `https://` API host and the DoH bind addresses
+(`ProxyConfig.tlsHosts`) as IP/DNS subject alternative names (unspecified
+addresses are skipped, IPv6 zones stripped); setting only one of
+`ssl-cert`/`ssl-key` is a config error.
 `NextProtos: ["h2", "http/1.1"]` enables HTTP/2 negotiation via ALPN so
 clients can multiplex multiple DNS queries over a single connection.
 Server-side timeouts (`ReadHeaderTimeout` 10 s, `ReadTimeout`/`WriteTimeout`
@@ -202,7 +206,12 @@ that can be specified multiple times), test helpers.
 levels and Stderr, Syslog, and Discard backends.
 
 **statshandler** -- fixed-size ring buffer of `ConnectionLog` entries with
-an SSE hook for the `/log` endpoint.
+an SSE hook for the `/log` endpoint. Hooks are added/removed under the buffer
+lock (`Insert` iterates them on every query). Each `/log` request registers
+its hook under a unique id (`RemoteAddr#n`) since HTTP/2 multiplexes several
+streams, e.g. dashboard tabs, over one connection. Hooks are called with the
+buffer lock held and send on an unbuffered channel, so a slow `/log` client
+delays query logging.
 
 ## Data flow
 

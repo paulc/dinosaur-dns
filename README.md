@@ -246,16 +246,25 @@ Enable the HTTP API (default bind `http://127.0.0.1:8553`):
 ```
 
 `-api-bind` is a URL (`http://host[:port]` or `https://host[:port]`, default
-port 8553) or an absolute UNIX socket path (plain HTTP). Use `0.0.0.0` or
-`[::]` as the host to listen on all addresses. HTTPS uses the same
-`-ssl-cert`/`-ssl-key` as the DoH server; if these are omitted a self-signed
-certificate is generated at startup (shared by DoH and the API).
+port 8553), a plain `host[:port]` (HTTP) or an absolute UNIX socket path
+(plain HTTP). IPv6 addresses must be in brackets (`[::1]:8553`). Use
+`0.0.0.0` or `[::]` as the host to listen on all addresses. HTTPS uses the
+same `-ssl-cert`/`-ssl-key` as the DoH server; if these are omitted a
+self-signed certificate is generated at startup (shared by DoH and the API).
+The self-signed certificate includes the HTTPS API and DoH bind hosts as
+subject alternative names (except `0.0.0.0`/`[::]`), so clients can verify it
+once they trust it (e.g. `json-rpc --cacert`) rather than skipping
+verification.
 
 `-api-auth user:password` enables HTTP basic auth for all API endpoints
 (including the dashboard). It may be given multiple times to allow several
 users. Credentials are sent in clear text over `http://`, so use `https://`
-for anything other than a loopback address or UNIX socket. Passwords are
-masked (`********`) in the output of `api.Config` and `api.GetMergedConfig`.
+for anything other than a loopback address or UNIX socket.
+
+**Note:** anyone with API access can read all of the `api-auth` passwords:
+they are included in full in the output of `api.Config` and
+`api.GetMergedConfig` (and so on the dashboard Config tab), so that the merged
+config can be used as a config file. Every API user is effectively an admin.
 
 | Flag | Description |
 |------|-------------|
@@ -323,8 +332,9 @@ exactly as they do for UDP/TCP clients.
 ```
 
 Multiple `-doh` flags are accepted (one listener each). If `-ssl-cert` and
-`-ssl-key` are omitted a self-signed ECDSA-P256 certificate is generated at
-startup. The same certificate is used by the HTTPS API.
+`-ssl-key` are omitted a self-signed ECDSA-P256 certificate (with the bind
+addresses as subject alternative names) is generated at startup. The same
+certificate is used by the HTTPS API.
 
 | Flag | Description |
 |------|-------------|

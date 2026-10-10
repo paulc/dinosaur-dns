@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io"
 	"net"
@@ -108,28 +109,28 @@ func TestNoAuth(t *testing.T) {
 	}
 }
 
-func TestConfigRedactsAuth(t *testing.T) {
-	c := authProxyConfig(t, config.DefaultApiBind, "user1:secret1", "user2:secret:2")
-	s := NewApiService(c)
+func TestConfigShowsAuth(t *testing.T) {
+	s := NewApiService(authProxyConfig(t, config.DefaultApiBind, "user1:secret1", "user2:secret:2"))
 
 	res := &config.UserConfig{}
 	if err := s.Config(&http.Request{}, &Empty{}, res); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(res.ApiAuth, " ") != "user1:"+RedactedPassword+" user2:"+RedactedPassword {
+	if strings.Join(res.ApiAuth, " ") != "user1:secret1 user2:secret:2" {
 		t.Errorf("Config: %v", res.ApiAuth)
 	}
-	// Original config is unchanged
-	if c.UserConfig.ApiAuth[0] != "user1:secret1" {
-		t.Errorf("UserConfig modified: %v", c.UserConfig.ApiAuth)
-	}
 
+	// Merged config can be used as a config file so includes credentials
 	merged := &MergedConfigRes{}
 	if err := s.GetMergedConfig(&http.Request{}, &Empty{}, merged); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(merged.Config, "secret") {
-		t.Errorf("GetMergedConfig exposes password: %s", merged.Config)
+	uc := config.UserConfig{}
+	if err := json.Unmarshal([]byte(merged.Config), &uc); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(uc.ApiAuth, " ") != "user1:secret1 user2:secret:2" {
+		t.Errorf("GetMergedConfig: %v", uc.ApiAuth)
 	}
 }
 
@@ -138,9 +139,20 @@ func TestHttpsApi(t *testing.T) {
 	c := authProxyConfig(t, "https://"+addr, "user:pass")
 	go MakeApiHandler(c)()
 
-	// Self-signed certificate so skip verification
+	// Trust the self-signed certificate - verifies the bind host is in the
+	// certificate SANs
+	serverTLS, err := c.GetTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(serverTLS.Certificates[0].Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(cert)
 	transport := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:   &tls.Config{RootCAs: roots},
 		ForceAttemptHTTP2: true,
 	}
 	client := &http.Client{Transport: transport}
@@ -199,26 +211,39 @@ func TestHttpsApi(t *testing.T) {
 	})
 
 	t.Run("Log", func(t *testing.T) {
+		// Two streams multiplexed over the same HTTP/2 connection (as with
+		// several dashboard tabs) must both receive log entries
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		req, _ := http.NewRequestWithContext(ctx, "GET", base+"/log", nil)
-		req.SetBasicAuth("user", "pass")
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
+		streams := make([]*bufio.Scanner, 2)
+		for i := range streams {
+			req, _ := http.NewRequestWithContext(ctx, "GET", base+"/log", nil)
+			req.SetBasicAuth("user", "pass")
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.ProtoMajor != 2 {
+				t.Errorf("Expected HTTP/2: %s", resp.Proto)
+			}
+			streams[i] = bufio.NewScanner(resp.Body)
 		}
-		defer resp.Body.Close()
 		c.StatsHandler.Add(&statshandler.ConnectionLog{Timestamp: time.Now(), Client: "client1"})
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			if line := scanner.Text(); strings.HasPrefix(line, "data:") {
-				entry := map[string]any{}
-				if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data:")), &entry); err != nil {
-					t.Errorf("Invalid log entry: %s", line)
+		for i, scanner := range streams {
+			received := false
+			for !received && scanner.Scan() {
+				if line := scanner.Text(); strings.HasPrefix(line, "data:") {
+					entry := map[string]any{}
+					if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data:")), &entry); err != nil {
+						t.Errorf("Invalid log entry: %s", line)
+					}
+					received = true
 				}
-				return
+			}
+			if !received {
+				t.Errorf("Stream %d: no SSE data received: %v", i, scanner.Err())
 			}
 		}
-		t.Errorf("No SSE data received: %v", scanner.Err())
 	})
 }

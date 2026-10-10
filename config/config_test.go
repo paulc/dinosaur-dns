@@ -179,6 +179,9 @@ func TestParseApiBind(t *testing.T) {
 		"http://0.0.0.0:8553":     {"http", "0.0.0.0:8553"},
 		"https://[::]:8443":       {"https", "[::]:8443"},
 		"/run/dinosaur.sock":      {"http", "/run/dinosaur.sock"},
+		"127.0.0.1:9000":          {"http", "127.0.0.1:9000"},
+		"[::1]:9000":              {"http", "[::1]:9000"},
+		"localhost":               {"http", "localhost:8553"},
 	} {
 		scheme, addr, err := ParseApiBind(in)
 		if err != nil {
@@ -190,7 +193,7 @@ func TestParseApiBind(t *testing.T) {
 		}
 	}
 	for _, in := range []string{
-		"127.0.0.1:8553", "ftp://127.0.0.1:21", "https://", "https://:8443",
+		"ftp://127.0.0.1:21", "::1:8553", ":8553", "https://", "https://:8443",
 		"https://127.0.0.1:99999", "https://127.0.0.1:8443/api", "https://u:p@127.0.0.1:8443",
 		"http://127.0.0.1:8553?x=1",
 	} {
@@ -202,7 +205,7 @@ func TestParseApiBind(t *testing.T) {
 
 func TestApiTLSOptions(t *testing.T) {
 	for _, bad := range []*UserConfig{
-		{ApiBind: "127.0.0.1:8553"},
+		{ApiBind: "ftp://127.0.0.1:8553"},
 		{ApiAuth: []string{"nopassword"}},
 		{ApiAuth: []string{":password"}},
 		{ApiAuth: []string{"user:"}},
