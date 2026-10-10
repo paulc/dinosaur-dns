@@ -1,8 +1,12 @@
 package config
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,12 +15,14 @@ import (
 	"github.com/paulc/dinosaur-dns/logger"
 	"github.com/paulc/dinosaur-dns/resolver"
 	"github.com/paulc/dinosaur-dns/statshandler"
+	"github.com/paulc/dinosaur-dns/util"
 )
 
 // Defaults for options which aren't set in the user config
 const (
 	DefaultUpstreamErrMax  = 3
-	DefaultApiBind         = "127.0.0.1:8553"
+	DefaultApiBind         = "http://127.0.0.1:8553"
+	DefaultApiPort         = 8553
 	DefaultDns64Prefix     = "64:ff9b::/96"
 	DefaultDohPath         = "/dns-query"
 	DefaultRefreshInterval = "24h"
@@ -46,11 +52,15 @@ type ProxyConfig struct {
 	Dns64            bool
 	Dns64Prefix      net.IPNet
 	Api              bool
-	ApiBind          string
+	ApiBind          string   // http(s)://host:port or UNIX socket path (see ParseApiBind)
+	ApiAuth          []string // user:password pairs for HTTP basic auth (none = no auth)
 	DohBind          []string
-	DohCert          string
-	DohKey           string
 	DohPath          string
+	SslCert          string // TLS cert/key shared by DoH and the HTTPS API
+	SslKey           string // (self-signed certificate generated if unset)
+	tlsOnce          sync.Once
+	tlsConfig        *tls.Config
+	tlsErr           error
 	StatsHandler     *statshandler.StatsHandler
 	Refresh          bool
 	RefreshInterval  time.Duration
@@ -74,6 +84,7 @@ func NewProxyConfig() *ProxyConfig {
 		BlockList:       blocklist.New(),
 		Dns64Prefix:     *dns64Prefix,
 		ApiBind:         DefaultApiBind,
+		ApiAuth:         make([]string, 0),
 		DohBind:         make([]string, 0),
 		DohPath:         DefaultDohPath,
 		StatsHandler:    statshandler.New(1000),
@@ -134,4 +145,37 @@ func (c *ProxyConfig) SetActiveUpstream(name string) error {
 		}
 	}
 	return fmt.Errorf("Unknown upstream: %s", name)
+}
+
+// GetTLSConfig returns the TLS config shared by the DoH server and the HTTPS
+// API, loaded from SslCert/SslKey (or a self-signed certificate if unset). It
+// is built once so both servers present the same certificate.
+func (c *ProxyConfig) GetTLSConfig() (*tls.Config, error) {
+	c.tlsOnce.Do(func() {
+		c.tlsConfig, c.tlsErr = util.MakeTLSConfig(c.SslCert, c.SslKey)
+	})
+	return c.tlsConfig, c.tlsErr
+}
+
+// ParseApiBind parses an api-bind value - either a URL (http://host[:port][/]
+// or https://host[:port][/], default port 8553) or an absolute UNIX socket
+// path (plain HTTP) - and returns the scheme and listen address.
+func ParseApiBind(bind string) (scheme, addr string, err error) {
+	if strings.HasPrefix(bind, "/") {
+		return "http", bind, nil
+	}
+	u, err := url.Parse(bind)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", "", fmt.Errorf("Invalid api-bind (%s): must be http://host:port, https://host:port or a UNIX socket path", bind)
+	}
+	if u.Host == "" || u.Hostname() == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", "", fmt.Errorf("Invalid api-bind (%s): expected %s://host[:port]", bind, u.Scheme)
+	}
+	port := u.Port()
+	if port == "" {
+		port = strconv.Itoa(DefaultApiPort)
+	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
+		return "", "", fmt.Errorf("Invalid api-bind (%s): invalid port", bind)
+	}
+	return u.Scheme, net.JoinHostPort(u.Hostname(), port), nil
 }

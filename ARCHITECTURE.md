@@ -36,6 +36,10 @@ client (UDP/TCP)
 `Version` (printed by `-version` and logged at startup) can be overridden at
 build time with `-ldflags "-X main.Version=x.y.z"`.
 
+**cmd/json-rpc** -- standalone JSON-RPC 2.0 CLI client. Supports HTTPS
+(`--insecure` to skip verification, `--cacert` for a custom CA) and basic
+auth (`--auth`, `$JSONRPC_AUTH` or credentials in the URL).
+
 **config** -- `UserConfig` (JSON-serialisable) and `ProxyConfig` (runtime
 state). `GetProxyConfig` translates user config into live objects: resolver
 instances (sharing one `resolver.Bootstrap` built by `GetBootstrap`), parsed
@@ -104,7 +108,7 @@ qtype. Supports ANY-type entries (match all qtypes) and specific-type entries
 (e.g. block AAAA only). Can be populated from a hosts file or a plain domain
 list.
 
-**api** -- optional HTTP server (default `127.0.0.1:8553`) with:
+**api** -- optional HTTP/HTTPS server (default `http://127.0.0.1:8553`) with:
 - `GET /` -- redirect to dashboard
 - `GET /ping` -- health check
 - `POST /api` -- JSON-RPC 2.0 endpoint (gorilla/rpc): Config, CacheAdd,
@@ -143,9 +147,25 @@ Config (active upstream with selector, server config, web-UI change summary,
 generate merged config), and
 API (JSON-RPC reference documentation).
 
-Can bind to a TCP address or a UNIX domain socket. When using a socket,
+`ProxyConfig.ApiBind` is a URL (`http://host[:port]` / `https://host[:port]`,
+default port 8553) or an absolute UNIX domain socket path (always plain
+HTTP); `config.ParseApiBind` splits it into scheme and listen address and is
+used both to validate the config and by `MakeApiHandler`. When using a socket,
 a signal handler removes the socket file before re-raising the signal so
-context-based shutdown proceeds normally.
+context-based shutdown proceeds normally. For `https://` the server uses the
+shared TLS config from `ProxyConfig.GetTLSConfig` (see **doh**) via
+`ServeTLS`, so HTTP/2 is negotiated by ALPN. Only `ReadHeaderTimeout`/
+`IdleTimeout` are set as `/log` is a long-lived SSE stream.
+
+`MakeRouter` builds the route handler. If `ProxyConfig.ApiAuth` (list of
+`user:password`, from `-api-auth`) is non-empty the whole router is wrapped
+in `basicAuth`, which compares SHA-256 hashes of the supplied credentials
+against each configured entry in constant time and returns `401` with a
+`WWW-Authenticate: Basic` challenge on failure (so browsers prompt). The
+dashboard uses relative URLs (`/api`, `/log`) so it works unchanged over
+HTTP or HTTPS, and same-origin `fetch`/`EventSource` requests reuse the
+browser's cached basic auth credentials. `Config` and `GetMergedConfig`
+mask api-auth passwords (`redactConfig`).
 
 **doh** -- optional HTTPS server (RFC 8484) for downstream DoH clients.
 `MakeDoHHandler` accepts GET (`?dns=<base64url>`) and POST
@@ -154,8 +174,11 @@ DNS message, and passes it to the same `proxy.MakeHandler` function used by
 UDP/TCP listeners via a thin `dohResponseWriter` adapter. All proxy logic
 (blocklist, cache, ACL, DNS64) therefore applies without modification.
 
-TLS is configured via `MakeTLSConfig`; when cert/key files are absent a
-self-signed ECDSA-P256 certificate is generated in memory at startup.
+TLS is configured via `ProxyConfig.GetTLSConfig`, which calls
+`util.MakeTLSConfig` once (`sync.Once`) with `SslCert`/`SslKey` so the DoH
+server and the HTTPS API share one config and certificate. When cert/key
+files are absent a self-signed ECDSA-P256 certificate is generated in memory
+at startup; setting only one of `ssl-cert`/`ssl-key` is a config error.
 `NextProtos: ["h2", "http/1.1"]` enables HTTP/2 negotiation via ALPN so
 clients can multiplex multiple DNS queries over a single connection.
 Server-side timeouts (`ReadHeaderTimeout` 10 s, `ReadTimeout`/`WriteTimeout`
@@ -165,12 +188,14 @@ functional.
 DoH listeners are also bound synchronously; any that fail to bind are logged
 and skipped.
 
-`ProxyConfig.DohBind`, `DohCert`, `DohKey`, `DohPath` mirror the `-doh*`
-flags. Default path is `/dns-query`; default port (via `util.ParseAddr`) is
+`ProxyConfig.DohBind`, `DohPath` mirror the `-doh*` flags; `SslCert`,
+`SslKey` mirror `-ssl-cert`/`-ssl-key`. Default path is `/dns-query`; default port (via `util.ParseAddr`) is
 443.
 
 **util** -- shared helpers: `ParseAddr` (resolves interface names to IP
-addresses), `JsonRpcRequest` (generic JSON-RPC client), `MultiFlag` (flag
+addresses), `JsonRpcRequest`/`JsonRpcRequestWithClient` (generic JSON-RPC client; basic
+auth via credentials in the URL), `MakeTLSConfig`/`GenerateSelfSigned` (TLS
+config from cert/key files or a self-signed certificate), `MultiFlag` (flag
 that can be specified multiple times), test helpers.
 
 **logger** -- thin wrapper around `log.Logger` with Debug/Info/Error/Fatal
@@ -207,7 +232,7 @@ JSON file values are read first, flags append to them.
 `-config-test`: an empty file is an empty config, unknown keys and trailing
 data are errors, and JSON errors are reported as line:col.
 `-config-test <file>` runs `GetProxyConfig` (with `setuid` temporarily
-cleared, so it isn't checked) and `doh.MakeTLSConfig` if DoH is enabled to
-validate the config, then prints `UserConfig.WithDefaults()` as JSON and
+cleared, so it isn't checked) and `ProxyConfig.GetTLSConfig` if DoH or an
+`https://` API is enabled to validate the config, then prints `UserConfig.WithDefaults()` as JSON and
 exits without starting the server. `GetProxyConfig` returns errors rather than exiting so
 they can be reported this way.

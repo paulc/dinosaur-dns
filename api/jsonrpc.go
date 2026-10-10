@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -29,9 +30,23 @@ func NewApiService(c *config.ProxyConfig) *ApiService {
 type Empty struct{}
 
 func (s *ApiService) Config(r *http.Request, req *Empty, res *config.UserConfig) error {
-	*res = s.config.UserConfig.WithDefaults()
+	*res = redactConfig(s.config.UserConfig.WithDefaults())
 	return nil
 }
+
+// redactConfig masks api-auth passwords so they aren't exposed via the API
+func redactConfig(uc config.UserConfig) config.UserConfig {
+	auth := make([]string, len(uc.ApiAuth))
+	for i, v := range uc.ApiAuth {
+		user, _, _ := strings.Cut(v, ":")
+		auth[i] = user + ":" + RedactedPassword
+	}
+	uc.ApiAuth = auth
+	return uc
+}
+
+// RedactedPassword replaces api-auth passwords in Config/GetMergedConfig
+const RedactedPassword = "********"
 
 // Manage Cache
 
@@ -222,7 +237,7 @@ type MergedConfigRes struct {
 
 func (s *ApiService) GetMergedConfig(r *http.Request, req *Empty, res *MergedConfigRes) error {
 	cl := s.changelog.snapshot()
-	uc := s.config.UserConfig.WithDefaults()
+	uc := redactConfig(s.config.UserConfig.WithDefaults())
 
 	// Remove block-deletes from the direct block list where present.
 	// Track which ones were found there vs which came from blocklist files.

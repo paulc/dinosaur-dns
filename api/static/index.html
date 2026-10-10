@@ -282,7 +282,8 @@ pre.code{font-family:monospace;font-size:12px;white-space:pre;overflow:auto;back
     Endpoint: <code>POST /api</code> &nbsp;|&nbsp; Content-Type: <code>application/json</code> &nbsp;|&nbsp;
     Protocol: JSON-RPC 2.0<br>
     Request: <code>{"jsonrpc":"2.0","method":"api.Method","params":{...},"id":1}</code><br>
-    Response: <code>{"jsonrpc":"2.0","id":1,"result":{...}}</code>
+    Response: <code>{"jsonrpc":"2.0","id":1,"result":{...}}</code><br>
+    Auth: HTTP basic auth if <code>-api-auth</code> is set (<code>api-auth</code> passwords are masked in config results)
   </div>
 
   <div class="api-section">

@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/paulc/dinosaur-dns/config"
-	"github.com/paulc/dinosaur-dns/doh"
 	"github.com/paulc/dinosaur-dns/server"
 )
 
@@ -45,10 +44,10 @@ func main() {
 		if err != nil {
 			configTestFail(err)
 		}
-		// DoH TLS cert/key are only loaded when the DoH server starts
-		if len(proxy_config.DohBind) > 0 {
-			if _, err := doh.MakeTLSConfig(proxy_config.DohCert, proxy_config.DohKey); err != nil {
-				configTestFail(fmt.Errorf("DoH TLS: %s", err))
+		// TLS cert/key are only loaded when the DoH/HTTPS API server starts
+		if apiScheme, _, _ := config.ParseApiBind(proxy_config.ApiBind); len(proxy_config.DohBind) > 0 || (proxy_config.Api && apiScheme == "https") {
+			if _, err := proxy_config.GetTLSConfig(); err != nil {
+				configTestFail(fmt.Errorf("TLS: %s", err))
 			}
 		}
 		out, err := json.MarshalIndent(user_config.WithDefaults(), "", "  ")

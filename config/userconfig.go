@@ -34,10 +34,11 @@ type UserConfig struct {
 	Dns64Prefix        string              `json:"dns64-prefix"`
 	Api                bool                `json:"api"`
 	ApiBind            string              `json:"api-bind"`
+	ApiAuth            []string            `json:"api-auth"`
 	Doh                []string            `json:"doh"`
-	DohCert            string              `json:"doh-cert"`
-	DohKey             string              `json:"doh-key"`
 	DohPath            string              `json:"doh-path"`
+	SslCert            string              `json:"ssl-cert"`
+	SslKey             string              `json:"ssl-key"`
 	Refresh            bool                `json:"refresh"`
 	RefreshInterval    string              `json:"refresh-interval"`
 	Debug              bool                `json:"debug"`
@@ -61,6 +62,7 @@ func NewUserConfig() *UserConfig {
 		LocalRR:            make([]string, 0),
 		LocalRRPtr:         make([]string, 0),
 		Localzone:          make([]string, 0),
+		ApiAuth:            make([]string, 0),
 		Doh:                make([]string, 0),
 	}
 }
@@ -74,7 +76,7 @@ func (user_config UserConfig) WithDefaults() UserConfig {
 		&user_config.Acl, &user_config.Block, &user_config.BlockDelete,
 		&user_config.Blocklist, &user_config.BlocklistAAAA, &user_config.BlocklistFromHosts,
 		&user_config.LocalRR, &user_config.LocalRRPtr, &user_config.Localzone,
-		&user_config.Doh,
+		&user_config.ApiAuth, &user_config.Doh,
 	} {
 		if *v == nil {
 			*v = make([]string, 0)
@@ -215,7 +217,16 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 	// API
 	config.Api = user_config.Api
 	if user_config.ApiBind != "" {
+		if _, _, err := ParseApiBind(user_config.ApiBind); err != nil {
+			return err
+		}
 		config.ApiBind = user_config.ApiBind
+	}
+	for _, v := range user_config.ApiAuth {
+		if user, pass, ok := strings.Cut(v, ":"); !ok || user == "" || pass == "" {
+			return fmt.Errorf("Invalid api-auth (format: 'user:password'): %s", v)
+		}
+		config.ApiAuth = append(config.ApiAuth, v)
 	}
 
 	// DoH server
@@ -226,11 +237,16 @@ func (user_config *UserConfig) GetProxyConfig(config *ProxyConfig) error {
 			config.DohBind = append(config.DohBind, addrs...)
 		}
 	}
-	config.DohCert = user_config.DohCert
-	config.DohKey = user_config.DohKey
 	if user_config.DohPath != "" {
 		config.DohPath = user_config.DohPath
 	}
+
+	// TLS cert/key (DoH and HTTPS API)
+	if (user_config.SslCert == "") != (user_config.SslKey == "") {
+		return fmt.Errorf("ssl-cert and ssl-key must be set together")
+	}
+	config.SslCert = user_config.SslCert
+	config.SslKey = user_config.SslKey
 
 	// Refresh Blocklist
 	config.Refresh = user_config.Refresh

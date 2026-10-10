@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type rpcRequest struct {
@@ -36,9 +39,12 @@ func main() {
 	id := flag.Int("id", 0, "Request `id` (random if 0)")
 	pretty := flag.Bool("pretty", false, "Pretty-print JSON output")
 	debug := flag.Bool("debug", false, "Print request/response details to stderr")
+	auth := flag.String("auth", "", "HTTP basic auth `user:password` (default: $JSONRPC_AUTH or credentials in URL)")
+	insecure := flag.Bool("insecure", false, "Skip TLS certificate verification (e.g. self-signed certificate)")
+	cacert := flag.String("cacert", "", "PEM CA certificate `file` used to verify the server certificate")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: json-rpc --url URL --method METHOD [--params JSON] [--id N] [--pretty] [--debug]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: json-rpc --url URL --method METHOD [--params JSON] [--id N] [--auth USER:PASSWORD] [--insecure] [--cacert FILE] [--pretty] [--debug]\n\n")
 		fmt.Fprintf(os.Stderr, "Params may be supplied via --params or piped to stdin.\n\n")
 		flag.PrintDefaults()
 	}
@@ -92,10 +98,46 @@ func main() {
 		fatalf("encoding request: %s", err)
 	}
 
-	debugf(*debug, "POST %s", *url)
+	// TLS options
+	tlsConfig := &tls.Config{InsecureSkipVerify: *insecure}
+	if *cacert != "" {
+		pem, err := os.ReadFile(*cacert)
+		if err != nil {
+			fatalf("reading CA certificate: %s", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			fatalf("no certificates found in %s", *cacert)
+		}
+		tlsConfig.RootCAs = pool
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+	client := &http.Client{Transport: transport}
+
+	req, err := http.NewRequest("POST", *url, bytes.NewReader(reqBody))
+	if err != nil {
+		fatalf("%s", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Basic auth: --auth, then $JSONRPC_AUTH (credentials in the URL are
+	// used by the client if neither is set)
+	if *auth == "" {
+		*auth = os.Getenv("JSONRPC_AUTH")
+	}
+	if *auth != "" {
+		user, pass, ok := strings.Cut(*auth, ":")
+		if !ok {
+			fatalf("--auth must be user:password")
+		}
+		req.SetBasicAuth(user, pass)
+	}
+
+	debugf(*debug, "POST %s", req.URL.Redacted())
 	debugf(*debug, "Request: %s", reqBody)
 
-	resp, err := http.Post(*url, "application/json", bytes.NewReader(reqBody))
+	resp, err := client.Do(req)
 	if err != nil {
 		fatalf("%s", err)
 	}

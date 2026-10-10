@@ -24,7 +24,7 @@ func TestServerApi(t *testing.T) {
 		proxy_config := config.NewProxyConfig()
 		proxy_config.Upstream = []resolver.Resolver{resolver.NewUdpResolver("1.1.1.1:53")}
 		proxy_config.Api = true
-		proxy_config.ApiBind = "127.0.0.1:8553"
+		proxy_config.ApiBind = "http://127.0.0.1:8553"
 		proxy_config.Log = logger.New(logger.NewDiscard(false))
 
 		ctx, cancelCtx := context.WithCancel(context.Background())

@@ -36,10 +36,12 @@ func TestGetUserConfig(t *testing.T) {
 		"-dns64",
 		"-dns64-prefix", "1111::/96",
 		"-api",
-		"-api-bind", "127.0.0.1:9999",
+		"-api-bind", "https://127.0.0.1:9999",
+		"-api-auth", "user1:pass1",
+		"-api-auth", "user2:pass:2",
 		"-doh", "127.0.0.1:8443",
-		"-doh-cert", "cert.pem",
-		"-doh-key", "key.pem",
+		"-ssl-cert", "cert.pem",
+		"-ssl-key", "key.pem",
 		"-doh-path", "/dns",
 		"-refresh",
 		"-refresh-interval", "60m",
@@ -70,10 +72,11 @@ func TestGetUserConfig(t *testing.T) {
 		!user_config.Dns64 ||
 		user_config.Dns64Prefix != "1111::/96" ||
 		!user_config.Api ||
-		user_config.ApiBind != "127.0.0.1:9999" ||
+		user_config.ApiBind != "https://127.0.0.1:9999" ||
+		slices.Compare(user_config.ApiAuth, []string{"user1:pass1", "user2:pass:2"}) != 0 ||
 		slices.Compare(user_config.Doh, []string{"127.0.0.1:8443"}) != 0 ||
-		user_config.DohCert != "cert.pem" ||
-		user_config.DohKey != "key.pem" ||
+		user_config.SslCert != "cert.pem" ||
+		user_config.SslKey != "key.pem" ||
 		user_config.DohPath != "/dns" ||
 		!user_config.Refresh ||
 		user_config.RefreshInterval != "60m" ||

@@ -180,6 +180,10 @@ All flags can be specified in a JSON file:
   "localrr":  ["host.local. 3600 IN A 192.168.1.10"],
   "acl":      ["192.168.1.0/24"],
   "api":      true,
+  "api-bind": "https://192.168.1.1:8553",
+  "api-auth": ["admin:secret"],
+  "ssl-cert": "/etc/ssl/dns.crt",
+  "ssl-key":  "/etc/ssl/dns.key",
   "refresh":  true,
   "refresh-interval": "6h",
   "debug":    false
@@ -225,13 +229,44 @@ Use an empty file to print the default config:
 
 ## API
 
-Enable the HTTP API (default bind `127.0.0.1:8553`):
+Enable the HTTP API (default bind `http://127.0.0.1:8553`):
 
 ```
 ./dinosaur -api
-./dinosaur -api -api-bind 127.0.0.1:9000
+./dinosaur -api -api-bind http://127.0.0.1:9000
 ./dinosaur -api -api-bind /run/dinosaur.sock
+
+# HTTPS (auto-generated self-signed certificate)
+./dinosaur -api -api-bind https://192.168.1.1:8553
+
+# HTTPS with a real certificate and basic auth
+./dinosaur -api -api-bind https://dns.example.com:8553 \
+  -ssl-cert /etc/ssl/dns.crt -ssl-key /etc/ssl/dns.key \
+  -api-auth admin:secret -api-auth readonly:password
 ```
+
+`-api-bind` is a URL (`http://host[:port]` or `https://host[:port]`, default
+port 8553) or an absolute UNIX socket path (plain HTTP). Use `0.0.0.0` or
+`[::]` as the host to listen on all addresses. HTTPS uses the same
+`-ssl-cert`/`-ssl-key` as the DoH server; if these are omitted a self-signed
+certificate is generated at startup (shared by DoH and the API).
+
+`-api-auth user:password` enables HTTP basic auth for all API endpoints
+(including the dashboard). It may be given multiple times to allow several
+users. Credentials are sent in clear text over `http://`, so use `https://`
+for anything other than a loopback address or UNIX socket. Passwords are
+masked (`********`) in the output of `api.Config` and `api.GetMergedConfig`.
+
+| Flag | Description |
+|------|-------------|
+| `-api` | Enable the API |
+| `-api-bind` | API bind URL or UNIX socket path (default: `http://127.0.0.1:8553`) |
+| `-api-auth` | Basic auth credentials `user:password` (multiple allowed) |
+| `-ssl-cert` | TLS certificate file (PEM) for HTTPS API and DoH |
+| `-ssl-key` | TLS private key file (PEM) for HTTPS API and DoH |
+
+Equivalent JSON config keys: `api`, `api-bind`, `api-auth` (list),
+`ssl-cert`, `ssl-key`.
 
 Endpoints:
 
@@ -266,7 +301,8 @@ JSON-RPC methods:
 The web dashboard (served at `/static/index.html`) provides a query log,
 blocklist management (including a timed pause), cache inspection, config
 viewer with change tracking, and API reference. Full JSON-RPC documentation
-is available on the API tab of the dashboard.
+is available on the API tab of the dashboard. The dashboard works over both
+HTTP and HTTPS; with `-api-auth` the browser prompts for credentials.
 
 ## DoH server
 
@@ -280,24 +316,24 @@ exactly as they do for UDP/TCP clients.
 ./dinosaur -doh 127.0.0.1:8443
 
 # Listen on all addresses of eth0, use a real certificate
-./dinosaur -doh eth0:443 -doh-cert /etc/ssl/doh.crt -doh-key /etc/ssl/doh.key
+./dinosaur -doh eth0:443 -ssl-cert /etc/ssl/doh.crt -ssl-key /etc/ssl/doh.key
 
 # Custom path
 ./dinosaur -doh 127.0.0.1:8443 -doh-path /resolve
 ```
 
-Multiple `-doh` flags are accepted (one listener each). If `-doh-cert` and
-`-doh-key` are omitted a self-signed ECDSA-P256 certificate is generated at
-startup.
+Multiple `-doh` flags are accepted (one listener each). If `-ssl-cert` and
+`-ssl-key` are omitted a self-signed ECDSA-P256 certificate is generated at
+startup. The same certificate is used by the HTTPS API.
 
 | Flag | Description |
 |------|-------------|
 | `-doh` | Listen address/interface (default port 443; multiple allowed) |
-| `-doh-cert` | TLS certificate file (PEM) |
-| `-doh-key` | TLS private key file (PEM) |
+| `-ssl-cert` | TLS certificate file (PEM) |
+| `-ssl-key` | TLS private key file (PEM) |
 | `-doh-path` | Request path (default: `/dns-query`) |
 
-Equivalent JSON config keys: `doh`, `doh-cert`, `doh-key`, `doh-path`.
+Equivalent JSON config keys: `doh`, `ssl-cert`, `ssl-key`, `doh-path`.
 
 Query a running DoH server:
 
@@ -329,6 +365,14 @@ go build ./cmd/json-rpc
 # Params via stdin
 echo '{"seconds":300}' | \
   ./json-rpc --url http://localhost:8553/api --method api.PauseBlocking --pretty
+
+# HTTPS with basic auth (self-signed certificate)
+./json-rpc --url https://192.168.1.1:8553/api --insecure \
+  --auth admin:secret --method api.Config --pretty
+
+# Credentials from the environment (or in the URL: https://admin:secret@host/api)
+JSONRPC_AUTH=admin:secret ./json-rpc --url https://dns.example.com:8553/api \
+  --cacert /etc/ssl/ca.crt --method api.GetUpstreams
 ```
 
 | Flag | Description |
@@ -338,6 +382,9 @@ echo '{"seconds":300}' | \
 | `--params` | JSON params string (object or array); reads stdin if omitted |
 | `--id` | Request ID (random if 0) |
 | `--pretty` | Pretty-print JSON output |
+| `--auth` | HTTP basic auth `user:password` (default: `$JSONRPC_AUTH` or credentials in URL) |
+| `--insecure` | Skip TLS certificate verification (e.g. self-signed certificate) |
+| `--cacert` | PEM CA certificate file used to verify the server certificate |
 | `--debug` | Print request body and HTTP status to stderr |
 
 Exit codes: 0 = success, 1 = usage/network error, 2 = HTTP non-200.
@@ -366,8 +413,10 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Access control list (CIDR)
   -api
         Enable API (default: false)
+  -api-auth value
+        API HTTP basic auth credentials (format: 'user:password', default: no auth)
   -api-bind string
-        API bind address (default: 127.0.0.1:8553)
+        API bind URL [http://host:port, https://host:port or UNIX socket path] (default: http://127.0.0.1:8553)
   -block value
         Block entry (format: 'domain[:qtype]')
   -block-delete value
@@ -396,10 +445,6 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         DNS64 prefix (default: 64:ff9b::/96)
   -doh value
         DoH listen address/interface (enables DoH server, default port 443)
-  -doh-cert string
-        DoH TLS certificate file (auto-generates self-signed if omitted)
-  -doh-key string
-        DoH TLS private key file
   -doh-path string
         DoH request path (default: /dns-query)
   -help
@@ -418,6 +463,10 @@ sudo ./dinosaur -listen 0.0.0.0:53 -setuid nobody:nobody
         Blocklist refresh interval (default: 24h)
   -setuid string
         Drop to user[:group] after binding (default: none)
+  -ssl-cert string
+        TLS certificate file for DoH/HTTPS API (auto-generates self-signed if omitted)
+  -ssl-key string
+        TLS private key file for DoH/HTTPS API
   -syslog
         Log to syslog (default: false)
   -upstream value

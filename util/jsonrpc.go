@@ -42,6 +42,13 @@ func JsonRpcEncoder(method string, params interface{}) (b []byte, id int, err er
 }
 
 func JsonRpcRequest[T any](endpoint, method string, params interface{}) (result T, err error) {
+	return JsonRpcRequestWithClient[T](http.DefaultClient, endpoint, method, params)
+}
+
+// JsonRpcRequestWithClient makes a JSON-RPC request using the supplied client
+// (e.g. with custom TLS config). Basic auth credentials can be given in the
+// endpoint URL (https://user:password@host:port/api).
+func JsonRpcRequestWithClient[T any](client *http.Client, endpoint, method string, params interface{}) (result T, err error) {
 
 	// Encode request
 	b, id, err := JsonRpcEncoder(method, params)
@@ -49,8 +56,6 @@ func JsonRpcRequest[T any](endpoint, method string, params interface{}) (result 
 		return
 	}
 
-	// Create client
-	client := http.Client{}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(b))
 	if err != nil {
 		return
@@ -62,6 +67,7 @@ func JsonRpcRequest[T any](endpoint, method string, params interface{}) (result 
 	if err != nil {
 		return
 	}
+	defer resp.Body.Close()
 
 	// Check status
 	if resp.StatusCode != 200 {
@@ -70,7 +76,6 @@ func JsonRpcRequest[T any](endpoint, method string, params interface{}) (result 
 	}
 
 	// Read body
-	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return
