@@ -256,6 +256,13 @@ subject alternative names (except `0.0.0.0`/`[::]`), so clients can verify it
 once they trust it (e.g. `json-rpc --cacert`) rather than skipping
 verification.
 
+Certificate files are re-read every 24 hours and a renewed certificate (e.g.
+from certbot/ACME) is used for new connections without a restart, so no
+deploy hook is needed. If the files can't be loaded (e.g. part way through
+renewal) the current certificate is kept and the error logged. The expiry
+date is logged at startup and on reload, with a warning when the certificate
+expires within 7 days.
+
 `-api-auth user:password` enables HTTP basic auth for all API endpoints
 (including the dashboard). It may be given multiple times to allow several
 users. Credentials are sent in clear text over `http://`, so use `https://`
@@ -334,7 +341,8 @@ exactly as they do for UDP/TCP clients.
 Multiple `-doh` flags are accepted (one listener each). If `-ssl-cert` and
 `-ssl-key` are omitted a self-signed ECDSA-P256 certificate (with the bind
 addresses as subject alternative names) is generated at startup. The same
-certificate is used by the HTTPS API.
+certificate is used by the HTTPS API. Certificate files are re-read every 24
+hours so ACME renewals are picked up without a restart (see API).
 
 | Flag | Description |
 |------|-------------|

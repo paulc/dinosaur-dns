@@ -10,33 +10,96 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 // MakeTLSConfig returns a TLS configuration using the supplied cert/key files.
-// If both paths are empty a fresh self-signed ECDSA-P256 certificate is
-// generated in memory for hosts (see GenerateSelfSigned).
-func MakeTLSConfig(certFile, keyFile string, hosts []string) (*tls.Config, error) {
-	var cert tls.Certificate
-	var err error
+// The certificate is served via a CertReloader (returned) so it can be
+// replaced while running (e.g. after ACME renewal). If both paths are empty a
+// fresh self-signed ECDSA-P256 certificate is generated in memory for hosts
+// (see GenerateSelfSigned) and the returned CertReloader is nil.
+func MakeTLSConfig(certFile, keyFile string, hosts []string) (*tls.Config, *CertReloader, error) {
+	// NextProtos enables HTTP/2 negotiation via ALPN; Go's http.Server
+	// activates the h2 handler automatically when it sees "h2" here.
+	nextProtos := []string{"h2", "http/1.1"}
 
 	if certFile != "" && keyFile != "" {
-		cert, err = tls.LoadX509KeyPair(certFile, keyFile)
-	} else {
-		cert, err = GenerateSelfSigned(hosts)
+		reloader, err := NewCertReloader(certFile, keyFile)
+		if err != nil {
+			return nil, nil, err
+		}
+		return &tls.Config{GetCertificate: reloader.GetCertificate, NextProtos: nextProtos}, reloader, nil
 	}
+
+	cert, err := GenerateSelfSigned(hosts)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: nextProtos}, nil, nil
+}
+
+// CertReloader serves a certificate loaded from cert/key files and replaces
+// it when Reload finds the files have changed. GetCertificate is just an
+// atomic load so there is no per-connection file access.
+type CertReloader struct {
+	certFile, keyFile string
+	cert              atomic.Pointer[tls.Certificate]
+}
+
+// NewCertReloader loads the cert/key files
+func NewCertReloader(certFile, keyFile string) (*CertReloader, error) {
+	r := &CertReloader{certFile: certFile, keyFile: keyFile}
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
+	r.cert.Store(&cert)
+	return r, nil
+}
 
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		// NextProtos enables HTTP/2 negotiation via ALPN; Go's http.Server
-		// activates the h2 handler automatically when it sees "h2" here.
-		NextProtos: []string{"h2", "http/1.1"},
-	}, nil
+// GetCertificate implements tls.Config.GetCertificate
+func (r *CertReloader) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return r.cert.Load(), nil
+}
+
+// Reload re-reads the cert/key files and swaps in the certificate if it has
+// changed. On error (e.g. a cert/key mismatch part way through renewal) the
+// current certificate is kept.
+func (r *CertReloader) Reload() (changed bool, err error) {
+	cert, err := tls.LoadX509KeyPair(r.certFile, r.keyFile)
+	if err != nil {
+		return false, err
+	}
+	if slices.EqualFunc(cert.Certificate, r.cert.Load().Certificate, slices.Equal) {
+		return false, nil
+	}
+	r.cert.Store(&cert)
+	return true, nil
+}
+
+// NotAfter returns the expiry time of the current certificate
+func (r *CertReloader) NotAfter() time.Time {
+	return r.cert.Load().Leaf.NotAfter
+}
+
+// WriteCertPair writes cert as PEM cert/key files
+func WriteCertPair(cert tls.Certificate, certFile, keyFile string) error {
+	keyDER, err := x509.MarshalPKCS8PrivateKey(cert.PrivateKey)
+	if err != nil {
+		return err
+	}
+	var certPEM []byte
+	for _, der := range cert.Certificate {
+		certPEM = append(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})...)
+	}
+	if err := os.WriteFile(certFile, certPEM, 0600); err != nil {
+		return err
+	}
+	return os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600)
 }
 
 // GenerateSelfSigned returns an in-memory self-signed ECDSA-P256 certificate

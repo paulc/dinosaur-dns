@@ -1,11 +1,13 @@
 package util
 
 import (
+	"bytes"
+	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestGenerateSelfSigned(t *testing.T) {
@@ -34,42 +36,84 @@ func TestGenerateSelfSigned(t *testing.T) {
 }
 
 func TestMakeTLSConfig(t *testing.T) {
-	cfg, err := MakeTLSConfig("", "", nil)
+	cfg, reloader, err := MakeTLSConfig("", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Certificates) == 0 {
-		t.Fatal("no certificates in TLS config")
+	if len(cfg.Certificates) == 0 || reloader != nil {
+		t.Fatal("expected static self-signed certificate")
 	}
 	if len(cfg.NextProtos) == 0 {
 		t.Fatal("no NextProtos in TLS config")
 	}
 }
 
+func writeTestCert(t *testing.T, certFile, keyFile string) tls.Certificate {
+	t.Helper()
+	cert, err := GenerateSelfSigned([]string{"127.0.0.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteCertPair(cert, certFile, keyFile); err != nil {
+		t.Fatal(err)
+	}
+	return cert
+}
+
+func servedCert(t *testing.T, cfg *tls.Config) []byte {
+	t.Helper()
+	cert, err := cfg.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cert.Certificate[0]
+}
+
 func TestMakeTLSConfigFiles(t *testing.T) {
-	// Write a generated cert/key pair to disk and load it back
-	cert, err := GenerateSelfSigned(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyDER, err := x509.MarshalPKCS8PrivateKey(cert.PrivateKey)
-	if err != nil {
-		t.Fatal(err)
-	}
 	dir := t.TempDir()
 	certFile, keyFile := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
-	os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]}), 0600)
-	os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600)
+	cert1 := writeTestCert(t, certFile, keyFile)
 
-	cfg, err := MakeTLSConfig(certFile, keyFile, nil)
+	cfg, reloader, err := MakeTLSConfig(certFile, keyFile, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Certificates) != 1 || string(cfg.Certificates[0].Certificate[0]) != string(cert.Certificate[0]) {
+	if reloader == nil || len(cfg.Certificates) != 0 {
+		t.Fatal("expected certificate served via CertReloader")
+	}
+	if !bytes.Equal(servedCert(t, cfg), cert1.Certificate[0]) {
 		t.Fatal("loaded certificate does not match")
 	}
+	if !reloader.NotAfter().After(time.Now()) {
+		t.Errorf("NotAfter: %s", reloader.NotAfter())
+	}
 
-	if _, err := MakeTLSConfig(certFile, filepath.Join(dir, "missing.pem"), nil); err == nil {
+	// Unchanged files
+	if changed, err := reloader.Reload(); changed || err != nil {
+		t.Errorf("Reload unchanged: %v %v", changed, err)
+	}
+
+	// Renewed certificate is swapped in
+	cert2 := writeTestCert(t, certFile, keyFile)
+	if changed, err := reloader.Reload(); !changed || err != nil {
+		t.Errorf("Reload renewed: %v %v", changed, err)
+	}
+	if !bytes.Equal(servedCert(t, cfg), cert2.Certificate[0]) {
+		t.Fatal("renewed certificate not served")
+	}
+
+	// Cert/key mismatch (e.g. part way through renewal) keeps the current cert
+	other := filepath.Join(dir, "other")
+	writeTestCert(t, other+".pem", other+".key")
+	os.Rename(other+".pem", certFile)
+	if _, err := reloader.Reload(); err == nil {
+		t.Error("expected error for cert/key mismatch")
+	}
+	if !bytes.Equal(servedCert(t, cfg), cert2.Certificate[0]) {
+		t.Fatal("current certificate not kept after failed reload")
+	}
+
+	if _, _, err := MakeTLSConfig(certFile, filepath.Join(dir, "missing.pem"), nil); err == nil {
 		t.Fatal("expected error for missing key")
 	}
 }
