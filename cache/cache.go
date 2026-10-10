@@ -241,6 +241,13 @@ func (c *DNSCache) Flush() (total, expired int) {
 	return
 }
 
+// Len returns the number of cache entries
+func (c *DNSCache) Len() int {
+	c.RLock()
+	defer c.RUnlock()
+	return len(c.Cache)
+}
+
 func (c *DNSCache) Debug() (result []string) {
 
 	c.Lock()

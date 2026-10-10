@@ -47,29 +47,6 @@ func unpackResponse(t *testing.T, body []byte) *dns.Msg {
 	return m
 }
 
-func TestGenerateSelfSigned(t *testing.T) {
-	cert, err := generateSelfSigned()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cert.Certificate) == 0 {
-		t.Fatal("empty certificate")
-	}
-}
-
-func TestMakeTLSConfig(t *testing.T) {
-	cfg, err := MakeTLSConfig("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.Certificates) == 0 {
-		t.Fatal("no certificates in TLS config")
-	}
-	if len(cfg.NextProtos) == 0 {
-		t.Fatal("no NextProtos in TLS config")
-	}
-}
-
 func TestDoHHandlerPOST(t *testing.T) {
 	pc := testProxyConfig(t, `{
 		"localrr": ["test.local. 60 IN A 1.2.3.4"],

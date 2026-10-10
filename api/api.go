@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"embed"
 	"fmt"
 	"net"
@@ -8,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc/v2"
@@ -48,50 +51,120 @@ func bindListener(bindAddress string, log *logger.Logger) (listener net.Listener
 	return
 }
 
-func MakeApiHandler(config *config.ProxyConfig) func() {
+// basicAuth wraps handler with HTTP basic auth, accepting any of the given
+// user:password credentials. If no credentials are configured the handler is
+// returned unchanged.
+func basicAuth(handler http.Handler, credentials []string) http.Handler {
+	if len(credentials) == 0 {
+		return handler
+	}
+	// Compare fixed-length hashes in constant time
+	hashes := make([][32]byte, len(credentials))
+	for i, v := range credentials {
+		hashes[i] = sha256.Sum256([]byte(v))
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if ok {
+			h := sha256.Sum256([]byte(user + ":" + pass))
+			match := 0
+			for i := range hashes {
+				match |= subtle.ConstantTimeCompare(h[:], hashes[i][:])
+			}
+			if match == 1 {
+				handler.ServeHTTP(w, r)
+				return
+			}
+		}
+		w.Header().Set("WWW-Authenticate", `Basic realm="dinosaur-dns", charset="UTF-8"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	})
+}
+
+// MakeRouter returns the API HTTP handler (JSON-RPC, log stream, dashboard),
+// wrapped with basic auth if proxyConfig.ApiAuth is set
+func MakeRouter(proxyConfig *config.ProxyConfig) http.Handler {
+
+	log := proxyConfig.Log
+
+	// JSON-RPC service
+	apiService := NewApiService(proxyConfig)
+	apiServer := rpc.NewServer()
+	apiServer.RegisterCodec(json2.NewCodec(), "application/json")
+	apiServer.RegisterService(apiService, "api")
+
+	// Setup Routes
+	router := mux.NewRouter()
+
+	router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "PONG") })
+
+	// Redirect root to dashboard
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/static/index.html", http.StatusFound)
+	})
+
+	// API
+	router.Handle("/api", apiServer)
+
+	// Log handler
+	router.HandleFunc("/log", makeLogHandler(proxyConfig.StatsHandler, log))
+
+	// Static files
+	router.PathPrefix("/static/").Handler(gzipped.FileServer(http.FS(static)))
+
+	// For testing provide access to FS
+	router.PathPrefix("/test/").Handler(http.StripPrefix("/test/", gzipped.FileServer(http.Dir("./api/static"))))
+
+	return basicAuth(router, proxyConfig.ApiAuth)
+}
+
+func MakeApiHandler(proxyConfig *config.ProxyConfig) func() {
 
 	return func() {
 
-		log := config.Log
+		log := proxyConfig.Log
 
-		// Bind API Listener
-		listener, err := bindListener(config.ApiBind, log)
+		scheme, addr, err := config.ParseApiBind(proxyConfig.ApiBind)
 		if err != nil {
-			log.Fatalf("API listener could not bind [%s]: %s", config.ApiBind, err)
+			log.Fatalf("API: %s", err)
 		}
 
-		// JSON-RPC service
-		apiService := NewApiService(config)
-		apiServer := rpc.NewServer()
-		apiServer.RegisterCodec(json2.NewCodec(), "application/json")
-		apiServer.RegisterService(apiService, "api")
+		// Bind API Listener
+		listener, err := bindListener(addr, log)
+		if err != nil {
+			log.Fatalf("API listener could not bind [%s]: %s", proxyConfig.ApiBind, err)
+		}
 
-		// Setup Routes
-		router := mux.NewRouter()
+		srv := &http.Server{
+			Handler: MakeRouter(proxyConfig),
+			// No read/write timeouts as /log is a long-lived SSE stream
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
 
-		router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "PONG") })
+		if scheme == "https" {
+			tlsCfg, err := proxyConfig.GetTLSConfig()
+			if err != nil {
+				log.Fatalf("API TLS: %s", err)
+			}
+			if proxyConfig.SslCert == "" {
+				log.Printf("API: using auto-generated self-signed certificate")
+			}
+			srv.TLSConfig = tlsCfg
+		} else if len(proxyConfig.ApiAuth) > 0 && addr[0] != '/' {
+			log.Printf("Warning: API basic auth credentials are sent unencrypted over HTTP (use https:// api-bind)")
+		}
 
-		// Redirect root to dashboard
-		router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/static/index.html", http.StatusFound)
-		})
+		log.Printf("Starting API Listener: %s", proxyConfig.ApiBind)
 
-		// API
-		router.Handle("/api", apiServer)
-
-		// Log handler
-		router.HandleFunc("/log", makeLogHandler(config.StatsHandler, log))
-
-		// Static files
-		router.PathPrefix("/static/").Handler(gzipped.FileServer(http.FS(static)))
-
-		// For testing provide access to FS
-		router.PathPrefix("/test/").Handler(http.StripPrefix("/test/", gzipped.FileServer(http.Dir("./api/static"))))
-
-		log.Printf("Starting API Listener: %s", config.ApiBind)
-
-		if serveErr := http.Serve(listener, router); serveErr != nil {
-			log.Fatalf("Error starting API server: %s", serveErr)
+		if scheme == "https" {
+			// Certificates are already in TLSConfig so no cert/key files needed
+			err = srv.ServeTLS(listener, "", "")
+		} else {
+			err = srv.Serve(listener)
+		}
+		if err != nil {
+			log.Fatalf("Error starting API server: %s", err)
 		}
 	}
 }

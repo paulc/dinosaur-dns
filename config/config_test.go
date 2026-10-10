@@ -50,7 +50,8 @@ var json_config = `
   "refresh": true,
   "refresh-interval": "60m",
   "api": true,
-  "api-bind": "127.0.0.1:9999",
+  "api-bind": "https://127.0.0.1:9999",
+  "api-auth": ["user1:pass1", "user2:pass:2"],
   "debug": true,
   "syslog": false,
   "discard": false
@@ -103,7 +104,8 @@ func TestUserConfig(t *testing.T) {
 	testValue(t, "Refresh", c.Refresh, true)
 	testValue(t, "RefreshInterval", c.RefreshInterval, time.Minute*60)
 	testValue(t, "Api", c.Api, true)
-	testValue(t, "ApiBind", c.ApiBind, "127.0.0.1:9999")
+	testValue(t, "ApiBind", c.ApiBind, "https://127.0.0.1:9999")
+	testValue(t, "ApiAuth", strings.Join(c.ApiAuth, " "), "user1:pass1 user2:pass:2")
 
 	for _, v := range []string{"abcd.local.:A", "abcd2.local.:A", "aaa.abcd.local.:A", "aaa.abcd.local.:AAAA",
 		"aaa.abcd.local.:TXT", "xxx.yyy.local.:A", "4.3.2.1.in-addr.arpa.:PTR"} {
@@ -164,4 +166,80 @@ func TestRefreshBlockListOverlay(t *testing.T) {
 	}
 	testValue(t, "Count", count, 3)
 	testValue(t, "Overlay", c.GetBlockList().Match("c.local.", dns.TypeA), true)
+}
+
+func TestParseApiBind(t *testing.T) {
+	for in, expected := range map[string][2]string{
+		"http://127.0.0.1:8553":   {"http", "127.0.0.1:8553"},
+		"https://127.0.0.1:8443":  {"https", "127.0.0.1:8443"},
+		"https://localhost:8443/": {"https", "localhost:8443"},
+		"https://[::1]:8443":      {"https", "[::1]:8443"},
+		"http://[::1]":            {"http", "[::1]:8553"},
+		"https://example.com":     {"https", "example.com:8553"},
+		"http://0.0.0.0:8553":     {"http", "0.0.0.0:8553"},
+		"https://[::]:8443":       {"https", "[::]:8443"},
+		"/run/dinosaur.sock":      {"http", "/run/dinosaur.sock"},
+		"127.0.0.1:9000":          {"http", "127.0.0.1:9000"},
+		"[::1]:9000":              {"http", "[::1]:9000"},
+		"localhost":               {"http", "localhost:8553"},
+	} {
+		scheme, addr, err := ParseApiBind(in)
+		if err != nil {
+			t.Errorf("%s: %s", in, err)
+			continue
+		}
+		if scheme != expected[0] || addr != expected[1] {
+			t.Errorf("%s: got %s %s, expected %s %s", in, scheme, addr, expected[0], expected[1])
+		}
+	}
+	for _, in := range []string{
+		"ftp://127.0.0.1:21", "::1:8553", ":8553", "https://", "https://:8443",
+		"https://127.0.0.1:99999", "https://127.0.0.1:8443/api", "https://u:p@127.0.0.1:8443",
+		"http://127.0.0.1:8553?x=1",
+	} {
+		if _, _, err := ParseApiBind(in); err == nil {
+			t.Errorf("%s: expected error", in)
+		}
+	}
+}
+
+func TestApiTLSOptions(t *testing.T) {
+	for _, bad := range []*UserConfig{
+		{ApiBind: "ftp://127.0.0.1:8553"},
+		{ApiAuth: []string{"nopassword"}},
+		{ApiAuth: []string{":password"}},
+		{ApiAuth: []string{"user:"}},
+		{SslCert: "cert.pem"},
+		{SslKey: "key.pem"},
+	} {
+		bad.Discard = true
+		if err := bad.GetProxyConfig(NewProxyConfig()); err == nil {
+			t.Errorf("Expected error: %+v", bad)
+		}
+	}
+
+	// Default bind / no auth
+	c := NewProxyConfig()
+	if err := (&UserConfig{Discard: true}).GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	testValue(t, "DefaultApiBind", c.ApiBind, DefaultApiBind)
+	testCount(t, "DefaultApiAuth", c.ApiAuth, 0)
+
+	// TLS config is shared (same self-signed certificate for DoH/API)
+	tls1, err := c.GetTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tls2, _ := c.GetTLSConfig()
+	testValue(t, "SharedTLSConfig", tls1, tls2)
+
+	// Missing cert/key files
+	c = NewProxyConfig()
+	if err := (&UserConfig{SslCert: "missing.pem", SslKey: "missing.key", Discard: true}).GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GetTLSConfig(); err == nil {
+		t.Error("Expected error for missing ssl-cert/ssl-key")
+	}
 }

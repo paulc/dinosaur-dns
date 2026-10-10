@@ -2,8 +2,15 @@ package statshandler
 
 import (
 	"encoding/json"
+	"sync/atomic"
 	"time"
 )
+
+// LogQueueSize is the number of log entries queued for each log channel
+// (/log SSE viewer) - enough to absorb a slow client for several seconds at
+// a few hundred queries/sec. Entries are dropped if the queue is full so a
+// slow viewer never blocks query logging.
+const LogQueueSize = 4096
 
 type ConnectionLog struct {
 	Timestamp time.Time
@@ -63,19 +70,38 @@ func (s *StatsHandler) Tail(n int) []ConnectionLog {
 	return s.connections.Tail(n)
 }
 
-func (s *StatsHandler) MakeLogChannel(id string, ch chan string) {
-	hookf := func(c ConnectionLog) {
-		defer func() {
-			if r := recover(); r != nil {
-				// Ignore write to closed channel
-			}
-		}()
-		b, _ := json.Marshal(c)
-		ch <- string(b)
-	}
-	s.connections.AddHook(id, hookf)
+// LogChannel receives JSON log entries for one viewer
+type LogChannel struct {
+	C       <-chan string
+	dropped atomic.Uint64
 }
 
+// Dropped returns the number of entries dropped because the queue was full
+func (l *LogChannel) Dropped() uint64 {
+	return l.dropped.Load()
+}
+
+// MakeLogChannel registers a log channel (queue of LogQueueSize entries)
+// which receives each new log entry. Sends never block - entries are
+// dropped (and counted) if the queue is full. Call CloseLogChannel with the
+// same (unique) id when done.
+func (s *StatsHandler) MakeLogChannel(id string) *LogChannel {
+	ch := make(chan string, LogQueueSize)
+	l := &LogChannel{C: ch}
+	hookf := func(c ConnectionLog) {
+		b, _ := json.Marshal(c)
+		select {
+		case ch <- string(b):
+		default:
+			l.dropped.Add(1)
+		}
+	}
+	s.connections.AddHook(id, hookf)
+	return l
+}
+
+// CloseLogChannel unregisters the log channel. Hooks run under the buffer
+// lock, so no more entries are sent once this returns.
 func (s *StatsHandler) CloseLogChannel(id string) {
 	s.connections.DeleteHook(id)
 }

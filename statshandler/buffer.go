@@ -37,10 +37,14 @@ func (b *CircularBuffer[T]) Insert(item T) {
 
 // Manage hook functions
 func (b *CircularBuffer[T]) AddHook(id string, f func(T)) {
+	b.Lock()
+	defer b.Unlock()
 	b.hooks[id] = f
 }
 
 func (b *CircularBuffer[T]) DeleteHook(id string) {
+	b.Lock()
+	defer b.Unlock()
 	delete(b.hooks, id)
 }
 

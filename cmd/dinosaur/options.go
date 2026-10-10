@@ -83,9 +83,9 @@ func GetUserConfig() (user_config *config.UserConfig, configTest bool, err error
 	var dns64Flag = flag.Bool("dns64", false, "Enable DNS64 (for queries from IPv6 addresses)")
 	var dns64PrefixFlag = flag.String("dns64-prefix", "", "DNS64 prefix (default: 64:ff9b::/96)")
 	var apiFlag = flag.Bool("api", false, "Enable API (default: false)")
-	var apiBindFlag = flag.String("api-bind", "", "API bind address (default: 127.0.0.1:8553)")
-	var dohCertFlag = flag.String("doh-cert", "", "DoH TLS certificate file (auto-generates self-signed if omitted)")
-	var dohKeyFlag = flag.String("doh-key", "", "DoH TLS private key file")
+	var apiBindFlag = flag.String("api-bind", "", "API bind URL [http://host:port, https://host:port or UNIX socket path] (default: http://127.0.0.1:8553)")
+	var sslCertFlag = flag.String("ssl-cert", "", "TLS certificate file for DoH/HTTPS API (auto-generates self-signed if omitted)")
+	var sslKeyFlag = flag.String("ssl-key", "", "TLS private key file for DoH/HTTPS API")
 	var dohPathFlag = flag.String("doh-path", "", "DoH request path (default: /dns-query)")
 	var refreshFlag = flag.Bool("refresh", false, "Auto refresh blocklist (default: false)")
 	var refreshIntervalFlag = flag.String("refresh-interval", "", "Blocklist refresh interval (default: 24hrs)")
@@ -133,6 +133,9 @@ func GetUserConfig() (user_config *config.UserConfig, configTest bool, err error
 
 	var aclFlag util.MultiFlag
 	flag.Var(&aclFlag, "acl", "Access control list (CIDR)")
+
+	var apiAuthFlag util.MultiFlag
+	flag.Var(&apiAuthFlag, "api-auth", "API HTTP basic auth credentials (format: 'user:password', default: no auth)")
 
 	var dohFlag util.MultiFlag
 	flag.Var(&dohFlag, "doh", "DoH listen address/interface (enables DoH server, default port 443)")
@@ -257,19 +260,24 @@ func GetUserConfig() (user_config *config.UserConfig, configTest bool, err error
 	if *apiBindFlag != "" {
 		user_config.ApiBind = *apiBindFlag
 	}
+	for _, v := range apiAuthFlag {
+		user_config.ApiAuth = append(user_config.ApiAuth, v)
+	}
 
 	// DoH server
 	for _, v := range dohFlag {
 		user_config.Doh = append(user_config.Doh, v)
 	}
-	if *dohCertFlag != "" {
-		user_config.DohCert = *dohCertFlag
-	}
-	if *dohKeyFlag != "" {
-		user_config.DohKey = *dohKeyFlag
-	}
 	if *dohPathFlag != "" {
 		user_config.DohPath = *dohPathFlag
+	}
+
+	// TLS cert/key (DoH and HTTPS API)
+	if *sslCertFlag != "" {
+		user_config.SslCert = *sslCertFlag
+	}
+	if *sslKeyFlag != "" {
+		user_config.SslKey = *sslKeyFlag
 	}
 
 	// Blocklist refresh

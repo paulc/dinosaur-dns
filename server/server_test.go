@@ -172,7 +172,7 @@ func TestCacheFlush(t *testing.T) {
 		<-ready
 
 		for i := 0; i < n; i++ {
-			if len(proxy_config.Cache.Cache) != n-1-i {
+			if proxy_config.Cache.Len() != n-1-i {
 				t.Fatal("Invalid cacahe length")
 			}
 			time.Sleep(1025 * time.Millisecond)
