@@ -210,8 +210,11 @@ an SSE hook for the `/log` endpoint. Hooks are added/removed under the buffer
 lock (`Insert` iterates them on every query). Each `/log` request registers
 its hook under a unique id (`RemoteAddr#n`) since HTTP/2 multiplexes several
 streams, e.g. dashboard tabs, over one connection. Hooks are called with the
-buffer lock held and send on an unbuffered channel, so a slow `/log` client
-delays query logging.
+buffer lock held, so `MakeLogChannel` gives each viewer a queue of
+`LogQueueSize` (4096) entries and sends without blocking: when a slow `/log`
+client lets its queue fill, new entries are dropped (counted, and logged when
+the viewer disconnects) rather than delaying query logging. No entries are
+sent once `CloseLogChannel` returns, so the channel is never closed.
 
 ## Data flow
 

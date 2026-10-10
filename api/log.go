@@ -27,15 +27,16 @@ func makeLogHandler(statsHandler *statshandler.StatsHandler, log *logger.Logger)
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		// Create log channel
-		logChan := make(chan string)
-		statsHandler.MakeLogChannel(id, logChan)
+		logChan := statsHandler.MakeLogChannel(id)
 		log.Printf("Log Handler Connected: %s\n", r.RemoteAddr)
 
 		defer func() {
-			// Close the log channel
-			close(logChan)
 			statsHandler.CloseLogChannel(id)
-			log.Printf("Log Handler Disconnected: %s\n", r.RemoteAddr)
+			if dropped := logChan.Dropped(); dropped > 0 {
+				log.Printf("Log Handler Disconnected: %s (%d entries dropped - client too slow)\n", r.RemoteAddr, dropped)
+			} else {
+				log.Printf("Log Handler Disconnected: %s\n", r.RemoteAddr)
+			}
 		}()
 
 		// Create http.Flusher
@@ -46,7 +47,7 @@ func makeLogHandler(statsHandler *statshandler.StatsHandler, log *logger.Logger)
 		// Send SSE events
 		for {
 			select {
-			case m := <-logChan:
+			case m := <-logChan.C:
 				fmt.Fprintf(w, "data: %s\n\n", m)
 				flusher.Flush()
 			case <-r.Context().Done():
