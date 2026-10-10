@@ -183,6 +183,17 @@ at startup, with the `https://` API host and the DoH bind addresses
 (`ProxyConfig.tlsHosts`) as IP/DNS subject alternative names (unspecified
 addresses are skipped, IPv6 zones stripped); setting only one of
 `ssl-cert`/`ssl-key` is a config error.
+
+Certificates loaded from files are served via `util.CertReloader`
+(`tls.Config.GetCertificate` returning an `atomic.Pointer`, so there is no
+per-connection file access). `GetTLSConfig` starts a goroutine which calls
+`Reload` every `ProxyConfig.SslRefreshInterval` (24 h): it re-reads the files
+and swaps the certificate in only if it differs (compared by content, so
+certbot's symlinked `live/` files work). A load error (e.g. cert and key
+mismatched mid-renewal) keeps the current certificate and is retried at the
+next interval. Expiry is logged at load/reload, with a warning within
+`SslExpiryWarning` (7 days). Existing connections keep the certificate they
+were established with.
 `NextProtos: ["h2", "http/1.1"]` enables HTTP/2 negotiation via ALPN so
 clients can multiplex multiple DNS queries over a single connection.
 Server-side timeouts (`ReadHeaderTimeout` 10 s, `ReadTimeout`/`WriteTimeout`

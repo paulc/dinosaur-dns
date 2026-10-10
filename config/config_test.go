@@ -1,13 +1,17 @@
 package config
 
 import (
+	"bytes"
+	"crypto/tls"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/paulc/dinosaur-dns/blocklist"
+	"github.com/paulc/dinosaur-dns/util"
 )
 
 var json_config = `
@@ -241,5 +245,67 @@ func TestApiTLSOptions(t *testing.T) {
 	}
 	if _, err := c.GetTLSConfig(); err == nil {
 		t.Error("Expected error for missing ssl-cert/ssl-key")
+	}
+}
+
+func TestSslRefresh(t *testing.T) {
+	dir := t.TempDir()
+	certFile, keyFile := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
+	writeCert := func() []byte {
+		cert, err := util.GenerateSelfSigned([]string{"127.0.0.1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := util.WriteCertPair(cert, certFile, keyFile); err != nil {
+			t.Fatal(err)
+		}
+		return cert.Certificate[0]
+	}
+	cert1 := writeCert()
+
+	c := NewProxyConfig()
+	if err := (&UserConfig{SslCert: certFile, SslKey: keyFile, Discard: true}).GetProxyConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	c.SslRefreshInterval = 50 * time.Millisecond
+	tlsCfg, err := c.GetTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Serve TLS and return the certificate presented to a new connection
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", tlsCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			conn.(*tls.Conn).Handshake()
+			conn.Close()
+		}
+	}()
+	served := func() []byte {
+		conn, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{InsecureSkipVerify: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		return conn.ConnectionState().PeerCertificates[0].Raw
+	}
+
+	if !bytes.Equal(served(), cert1) {
+		t.Fatal("initial certificate not served")
+	}
+	cert2 := writeCert()
+	for i := 0; !bytes.Equal(served(), cert2); i++ {
+		if i > 50 {
+			t.Fatal("renewed certificate not served")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

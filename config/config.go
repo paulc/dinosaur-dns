@@ -26,6 +26,10 @@ const (
 	DefaultDns64Prefix     = "64:ff9b::/96"
 	DefaultDohPath         = "/dns-query"
 	DefaultRefreshInterval = "24h"
+	// Interval to check ssl-cert/ssl-key files for a renewed certificate
+	DefaultSslRefreshInterval = 24 * time.Hour
+	// Warn if the certificate expires within this time (renewal failing)
+	SslExpiryWarning = 7 * 24 * time.Hour
 )
 
 // Default listen addresses and upstreams (used if none are configured)
@@ -58,38 +62,41 @@ type ProxyConfig struct {
 	DohPath          string
 	SslCert          string // TLS cert/key shared by DoH and the HTTPS API
 	SslKey           string // (self-signed certificate generated if unset)
-	tlsOnce          sync.Once
-	tlsConfig        *tls.Config
-	tlsErr           error
-	StatsHandler     *statshandler.StatsHandler
-	Refresh          bool
-	RefreshInterval  time.Duration
-	Log              *logger.Logger
-	UserConfig       *UserConfig
-	Setuid           bool
-	SetuidUid        int
-	SetuidGid        int
+	// SslRefreshInterval is how often ssl-cert/ssl-key are re-read
+	SslRefreshInterval time.Duration
+	tlsOnce            sync.Once
+	tlsConfig          *tls.Config
+	tlsErr             error
+	StatsHandler       *statshandler.StatsHandler
+	Refresh            bool
+	RefreshInterval    time.Duration
+	Log                *logger.Logger
+	UserConfig         *UserConfig
+	Setuid             bool
+	SetuidUid          int
+	SetuidGid          int
 }
 
 func NewProxyConfig() *ProxyConfig {
 	_, dns64Prefix, _ := net.ParseCIDR(DefaultDns64Prefix)
 	refreshInterval, _ := time.ParseDuration(DefaultRefreshInterval)
 	return &ProxyConfig{
-		ListenAddr:      make([]string, 0),
-		Upstream:        make([]resolver.Resolver, 0),
-		UpstreamErrMax:  DefaultUpstreamErrMax,
-		Acl:             make([]net.IPNet, 0),
-		Cache:           cache.New(),
-		CacheFlush:      30 * time.Second,
-		BlockList:       blocklist.New(),
-		Dns64Prefix:     *dns64Prefix,
-		ApiBind:         DefaultApiBind,
-		ApiAuth:         make([]string, 0),
-		DohBind:         make([]string, 0),
-		DohPath:         DefaultDohPath,
-		StatsHandler:    statshandler.New(1000),
-		Log:             logger.New(logger.NewStderr(false)),
-		RefreshInterval: refreshInterval,
+		ListenAddr:         make([]string, 0),
+		Upstream:           make([]resolver.Resolver, 0),
+		UpstreamErrMax:     DefaultUpstreamErrMax,
+		Acl:                make([]net.IPNet, 0),
+		Cache:              cache.New(),
+		CacheFlush:         30 * time.Second,
+		BlockList:          blocklist.New(),
+		Dns64Prefix:        *dns64Prefix,
+		ApiBind:            DefaultApiBind,
+		ApiAuth:            make([]string, 0),
+		DohBind:            make([]string, 0),
+		DohPath:            DefaultDohPath,
+		StatsHandler:       statshandler.New(1000),
+		Log:                logger.New(logger.NewStderr(false)),
+		RefreshInterval:    refreshInterval,
+		SslRefreshInterval: DefaultSslRefreshInterval,
 	}
 }
 
@@ -150,12 +157,38 @@ func (c *ProxyConfig) SetActiveUpstream(name string) error {
 // GetTLSConfig returns the TLS config shared by the DoH server and the HTTPS
 // API, loaded from SslCert/SslKey (or a self-signed certificate for the API
 // and DoH bind hosts if unset). It is built once so both servers present the
-// same certificate.
+// same certificate. When loaded from files, a goroutine re-reads them every
+// SslRefreshInterval and swaps in a renewed certificate.
 func (c *ProxyConfig) GetTLSConfig() (*tls.Config, error) {
 	c.tlsOnce.Do(func() {
-		c.tlsConfig, c.tlsErr = util.MakeTLSConfig(c.SslCert, c.SslKey, c.tlsHosts())
+		var reloader *util.CertReloader
+		c.tlsConfig, reloader, c.tlsErr = util.MakeTLSConfig(c.SslCert, c.SslKey, c.tlsHosts())
+		if reloader != nil {
+			c.Log.Printf("TLS certificate: %s (expires %s)", c.SslCert, reloader.NotAfter().Format(time.RFC3339))
+			c.checkCertExpiry(reloader)
+			go c.refreshCert(reloader)
+		}
 	})
 	return c.tlsConfig, c.tlsErr
+}
+
+// refreshCert re-reads the TLS cert/key files every SslRefreshInterval
+func (c *ProxyConfig) refreshCert(reloader *util.CertReloader) {
+	for {
+		time.Sleep(c.SslRefreshInterval)
+		if changed, err := reloader.Reload(); err != nil {
+			c.Log.Printf("Error reloading TLS certificate (keeping current certificate): %s", err)
+		} else if changed {
+			c.Log.Printf("TLS certificate reloaded: %s (expires %s)", c.SslCert, reloader.NotAfter().Format(time.RFC3339))
+		}
+		c.checkCertExpiry(reloader)
+	}
+}
+
+func (c *ProxyConfig) checkCertExpiry(reloader *util.CertReloader) {
+	if remaining := time.Until(reloader.NotAfter()); remaining < SslExpiryWarning {
+		c.Log.Printf("Warning: TLS certificate %s expires in %s (%s)", c.SslCert, remaining.Round(time.Minute), reloader.NotAfter().Format(time.RFC3339))
+	}
 }
 
 // tlsHosts returns the hosts the TLS servers are bound to (https API and DoH)
